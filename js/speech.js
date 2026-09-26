@@ -89,6 +89,10 @@ export function speak(text, { slow = false, rate = null, voiceUri = null } = {})
   if (!voices.length || !chosen) refreshVoices();
   const v = voiceUri ? voices.find(x => x.voiceURI === voiceUri) || chosen : chosen;
   if (voices.length && !v) { log('no-zh-voice', `voices=${voices.length}`); notify(NO_VOICE); return false; }
+  // без сети сетевой голос молчит: сказать сразу, а не ждать тишины (голоса «на устройстве» не затрагиваются)
+  if (v && v.localService === false && typeof navigator !== 'undefined' && navigator.onLine === false) {
+    log('offline-network-voice', v.name); notify(`Голос «${v.name}» сетевой — без интернета звука не будет. Выберите голос «на устройстве»: «Данные» → «Голос».`); return false;
+  }
   const my = ++seq;
   lastAction = { at: now(), text, slow: !!slow, voice: v ? `${v.name} (${v.lang})` : 'системный zh-CN' };
   let started = false;

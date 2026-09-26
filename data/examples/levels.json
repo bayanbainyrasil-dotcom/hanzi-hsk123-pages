@@ -3,7 +3,7 @@
  "levels": [
   {
    "level": "hsk1",
-   "stamp": "bfb4f09a7119",
+   "stamp": "18e86bfcc17c",
    "words": 300,
    "covered": 300,
    "one": 0,
@@ -11,11 +11,19 @@
   },
   {
    "level": "hsk2",
-   "stamp": "46bfa72d9393",
+   "stamp": "7db3f99a045f",
    "words": 200,
    "covered": 200,
    "one": 0,
    "examples": 407
+  },
+  {
+   "level": "hsk3",
+   "stamp": "2c284cb47aa7",
+   "words": 500,
+   "covered": 500,
+   "one": 0,
+   "examples": 1012
   }
  ]
 }
