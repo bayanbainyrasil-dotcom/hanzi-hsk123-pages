@@ -12,7 +12,7 @@ const $ = (sel, root = document) => root.querySelector(sel);
 const view = $('#view');
 let swError = null;
 // номер запущенной версии: при публикации сборка подставляет сюда коммит (tools/build-site.mjs)
-const BUILD = '199595e';
+const BUILD = 'c9020c6';
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const html = (strings, ...vals) => strings.reduce((a, s, i) => a + s + (i < vals.length ? (Array.isArray(vals[i]) ? vals[i].join('') : vals[i] ?? '') : ''), '');
 
@@ -1286,13 +1286,22 @@ async function onViewChange(ev) {
     }
     if (mode === 'transfer') {
       input.value = '';
-      const r = await store.importTransfer(JSON.parse(text));
+      const obj = JSON.parse(text);
+      const r = await store.importTransfer(obj);
       const st = r.stats;
-      modal(html`<h3>Данные перенесены</h3>
+      // прогресс прежней однофайловой версии, который на старом адресе так и остался в localStorage
+      const legacySrc = migrate.legacyFromDump(obj);
+      const lg = legacySrc ? await migrate.migrate({ source: legacySrc, profileMap: migrate.legacyProfilesInDump(obj) }) : null;
+      if (lg) await store.focusFilled(lg.profiles.map(p => p.profileId));
+      const lgMarks = lg ? lg.written + lg.already : 0;
+      const found = st.progress + st.duplicates + st.keptNewer + lgMarks + st.attempts + st.notes + st.journal;
+      modal(html`<h3>${found ? 'Данные перенесены' : 'В файле нет отметок для переноса'}</h3>
         <p>Файл: ${esc(r.kind)}${r.from ? ` с ${esc(r.from)}` : ''}${r.exportedAt ? `, от ${esc(new Date(r.exportedAt).toLocaleString('ru-RU'))}` : ''}.</p>
         <p class="small">Профили: ${esc(r.names.join(', ') || '—')} (новых ${st.profiles}, дополнено ${st.merged})</p>
         <p class="small">Записано: отметки ${st.progress} · попытки ${st.attempts} · заметки ${st.notes} · дневник ${st.journal} · занятия ${st.sessions}${st.entries ? ` · свои слова ${st.entries}` : ''}</p>
-        <p class="muted small">Уже были: ${st.duplicates}; оставлены более новые здешние записи: ${st.keptNewer}. Копия прежних данных этого адреса сохранена.</p>
+        ${lg ? html`<p class="small">Прежняя версия (старые ключи): записано ${lg.written}, уже было ${lg.already}, не опознано ${lg.unmatched}.</p>
+          <ul class="small">${lg.profiles.map(p => html`<li>${esc(p.name)}: отметок в файле ${p.found}, перенесено ${p.moved}, уже было ${p.already}</li>`).join('')}</ul>` : ''}
+        <p class="muted small">Уже были: ${st.duplicates}; оставлены более новые здешние записи: ${st.keptNewer}. Копия прежних данных этого адреса сохранена${lg ? '; старые ключи сохранены копией в базе' : ''}.</p>
         <button class="btn" data-close>Закрыть</button>`);
       return render();
     }

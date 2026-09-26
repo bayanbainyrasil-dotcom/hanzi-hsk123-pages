@@ -376,6 +376,16 @@ export function readTransfer(obj) {
   throw new Error('это не файл hanzi-hsk123: ' + (fmt || 'формат не указан'));
 }
 
+/** Если открыт пустой профиль — открыть из перечисленных тот, где больше всего отметок. Непустой не переключается. */
+export async function focusFilled(ids) {
+  const cnt = (id) => db.countIndex('progress', 'byProfile', IDBKeyRange.only(id));
+  if (currentProfileId && await cnt(currentProfileId)) return false;
+  let best = null, max = 0;
+  for (const id of new Set(ids.filter(Boolean))) { if (!(await db.get('profiles', id))) continue; const n = await cnt(id); if (n > max) { max = n; best = id; } }
+  if (!best) return false;
+  await setProfile(best); return true;
+}
+
 export async function importTransfer(obj) {
   const t = readTransfer(obj);
   const snapshot = {};

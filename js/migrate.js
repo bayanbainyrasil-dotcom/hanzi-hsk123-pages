@@ -23,9 +23,36 @@ const GAP = [3, 8, 20, 45, 90];
 
 export const LEGACY_DUMP_FORMAT = 'hanzi-hsk123/legacy-localstorage@1';
 
-/** Файл выгрузки со старого сайта (export-legacy.html) → { ключ: строка }. */
+const DEVICE_DUMP = /^hanzi-hsk123\/device-dump@/;
+
+/** Старые ключи из «копии всех данных» (device-dump@1) → { ключ: строка } или null, если их там нет.
+ *  Нужны, когда на прежнем адресе прогресс так и остался в localStorage и в базу не переносился. */
+export function legacyFromDump(obj) {
+  if (!DEVICE_DUMP.test(String(obj?.format || ''))) return null;
+  const ls = obj.localStorage, out = {};
+  if (!ls || typeof ls !== 'object') return null;
+  for (const [k, v] of Object.entries(ls)) if (typeof v === 'string' && (k === LEGACY_LIST || LEGACY_DATA.test(k))) out[k] = v;
+  return hasLegacy(out) ? out : null;
+}
+
+/** Какие профили базы в том же файле уже получили отметки из старых ключей (перенос на прежнем адресе):
+ *  { hsk_d_<id>: profileId } — чтобы второй раз не создавать профиль и не дублировать отметки. */
+export function legacyProfilesInDump(obj) {
+  const map = {};
+  for (const r of obj?.indexedDB?.progress || []) if (r?.migratedFrom && r.profileId && !map[r.migratedFrom]) map[r.migratedFrom] = r.profileId;
+  const meta = (obj?.indexedDB?.meta || []).find(m => m?.key === 'legacyProfileMap')?.value;
+  if (meta && typeof meta === 'object') for (const [k, v] of Object.entries(meta)) if (!map[k] && typeof v === 'string') map[k] = v;
+  return map;
+}
+
+/** Файл выгрузки со старого сайта (export-legacy.html или «копия всех данных») → { ключ: строка }. */
 export function parseLegacyDump(obj) {
   if (!obj || typeof obj !== 'object') throw new Error('файл не похож на выгрузку старой версии');
+  if (DEVICE_DUMP.test(String(obj.format || ''))) {
+    const src = legacyFromDump(obj);
+    if (!src) throw new Error('в файле нет ключей hsk_profiles_v2 / hsk_d_*');
+    return src;
+  }
   if (obj.format && obj.format !== LEGACY_DUMP_FORMAT) throw new Error('чужой формат: ' + obj.format);
   const ls = obj.localStorage;
   if (!ls || typeof ls !== 'object' || !(LEGACY_LIST in ls || Object.keys(ls).some(k => LEGACY_DATA.test(k))))
@@ -115,7 +142,7 @@ export function convertState(st, { lastMs = 0, now = Date.now() } = {}) {
  * @param {{dryRun?:boolean}} opts
  * @returns отчёт по профилям: найдено, перенесено, уже было, не опознано
  */
-export async function migrate({ dryRun = false, source = null } = {}) {
+export async function migrate({ dryRun = false, source = null, profileMap = null } = {}) {
   const legacy = readLegacy(source);
   if (source) legacy.from = 'file';
   const report = { profiles: [], matched: 0, written: 0, already: 0, unmatched: 0, unmatchedSamples: [], backupId: null, backupReused: false, dryRun };
@@ -136,7 +163,8 @@ export async function migrate({ dryRun = false, source = null } = {}) {
     : Object.keys(legacy.data).map(k => ({ name: k.replace(/^hsk_d_/, 'Профиль '), key: k }));
 
   // какой новый профиль соответствует какому старому — чтобы повторный запуск не плодил профили
-  const map = { ...(await db.metaGet('legacyProfileMap', {})) };
+  // profileMap — соответствие из файла переноса (профиль уже перенесён вместе с базой); здешнее соответствие важнее
+  const map = { ...(profileMap || {}), ...(await db.metaGet('legacyProfileMap', {})) };
   const needPacks = new Set();
   const now = Date.now();
 
