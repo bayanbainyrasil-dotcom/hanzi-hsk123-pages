@@ -1,6 +1,7 @@
 // Доменный слой: профили, прогресс, попытки, заметки, дневник, сессии, повторение.
 import * as db from './db.js';
 import { uid, checksum } from './model.js';
+import { MODE_SKILL, CHOICE_MODES } from './practice.js';
 
 export const MARKS = ['new', 'learning', 'known', 'hard'];
 export const MARK_RU = { new: 'новое', learning: 'учу', known: 'знаю', hard: 'трудное' };
@@ -86,7 +87,16 @@ export async function addToReview(entryId) {
   return p;
 }
 
-/** Ответ пользователя: пишем попытку и двигаем очередь повторения. */
+/**
+ * Ответ пользователя: пишем попытку и двигаем очередь повторения (одна система: step/due).
+ * • Самооценка («Не знаю / Почти / Знаю») во всех направлениях — полный вес, как раньше; первое «Знаю» после
+ *   нуля — интервал GAP[0] (3 дня), дальше по ступеням (раньше сразу прыгало на 8 дней).
+ * • Выбор из вариантов (mode quiz / quiz-au) — слабое свидетельство: ступень не растёт, «знаю» не ставится,
+ *   следующая проверка — самостоятельным вспоминанием не позже чем через 3 дня; ошибка — ступень −2 (не сброс),
+ *   повтор через 10 минут.
+ * • Раздельный учёт навыков p.skills[навык] = {n, ok, almost, bad, last, lastRes} — новые поля; старые записи не
+ *   пересчитываются. p.firstAt — первое знакомство (для лимита новых слов в день).
+ */
 export async function recordAttempt({ entryId, lessonId = null, correct, almost = false, mode = 'drill', answer = '', ms = 0 }) {
   const now = Date.now();
   const attempt = {
@@ -94,26 +104,43 @@ export async function recordAttempt({ entryId, lessonId = null, correct, almost 
     ts: now, mode, correct: !!correct && !almost, ...(almost ? { grade: 'almost' } : {}), answer: String(answer).slice(0, 200), ms
   };
   const p = (await getProgress(entryId)) || blank(entryId);
+  if (!p.reps && !p.firstAt) p.firstAt = now;
   p.reps += 1;
   p.lastAt = now;
-  if (almost) {
+  const choice = CHOICE_MODES.has(mode);
+  if (choice) {
+    if (correct) {
+      p.due = now + Math.min(GAP[p.step] ?? GAP[0], GAP[0]) * DAY;
+      if (p.status === 'new') p.status = 'learning';
+    } else {
+      p.lapses += 1; p.streak = 0; p.step = Math.max(0, p.step - 2);
+      p.due = now + 10 * 60 * 1000;
+      if (!p.markedManually || p.status === 'new') p.status = p.lapses >= 3 ? 'hard' : 'learning';
+    }
+  } else if (almost) {
     // «Почти»: слово не провалено, но и не выучено — ступень не растёт, вернётся завтра
     p.streak = 0;
     p.step = Math.max(1, Math.min(p.step, 1));
     p.due = now + DAY;
     if (!p.markedManually || p.status === 'new') p.status = 'learning';
   } else if (correct) {
+    if (p.step === 0 && !p.streak) p.due = now + GAP[0] * DAY;          // первое «знаю» после нуля — 3 дня
+    else { p.step = Math.min(p.step + 1, GAP.length - 1); p.due = now + GAP[p.step] * DAY; }
     p.streak += 1;
-    p.step = Math.min(p.step + 1, GAP.length - 1);
-    p.due = now + GAP[p.step] * DAY;
     // «Знаю» на карточке — как в первой версии: слово сразу считается известным,
-    // а в очередь повторения оно всё равно вернётся по интервалу. Выбор ответа в
-    // самопроверке — постепенный рост.
-    if (!p.markedManually) p.status = mode === 'recall' || p.step >= GAP.length - 1 ? 'known' : 'learning';
+    // а в очередь повторения оно всё равно вернётся по интервалу.
+    if (!p.markedManually) p.status = mode === 'recall' || mode === 'recall-ru' || mode === 'recall-au' || mode === 'cloze' || p.step >= GAP.length - 1 ? 'known' : 'learning';
   } else {
     p.streak = 0; p.lapses += 1; p.step = 0;
     p.due = now + 10 * 60 * 1000;   // ошибка — вернуть через 10 минут
     if (!p.markedManually) p.status = p.lapses >= 3 ? 'hard' : 'learning';
+  }
+  const sk = MODE_SKILL[mode];
+  if (sk) {
+    const res = almost ? 'almost' : correct ? 'ok' : 'bad';
+    const cur = { n: 0, ok: 0, almost: 0, bad: 0, ...(p.skills?.[sk] || {}) };
+    cur.n += 1; cur[res] += 1; cur.last = now; cur.lastRes = res;
+    p.skills = { ...(p.skills || {}), [sk]: cur };
   }
   p.updatedAt = new Date().toISOString();
   // попытка, очередь повторения и занятие — одной транзакцией: либо всё, либо ничего
@@ -123,6 +150,22 @@ export async function recordAttempt({ entryId, lessonId = null, correct, almost 
   session = ses;                                  // счётчик в памяти меняем только после подтверждения записи
   emit('progress');
   return { attempt, progress: p };
+}
+
+/** Лимит новых слов в день (для ежедневного занятия), по профилю. */
+export const newPerDay = async () => Number(await db.metaGet('newPerDay:' + currentProfileId, 5)) || 5;
+export const setNewPerDay = (n) => db.metaSet('newPerDay:' + currentProfileId, Math.max(1, Math.min(50, Number(n) || 5)));
+/** Сколько слов станет «пора повторить» в ближайшие ms (без тех, что уже пора). */
+export async function dueWithin(entryIds, ms, now = Date.now()) {
+  const pm = await profileProgress(); let n = 0;
+  for (const id of entryIds) { const p = pm.get(id); if (p && p.reps && p.due > now && p.due <= now + ms) n++; }
+  return n;
+}
+/** Сколько новых слов уже начато сегодня (по первому знакомству firstAt). */
+export async function newStartedToday(now = Date.now()) {
+  const d = new Date(now); d.setHours(0, 0, 0, 0);
+  const rows = await db.byIndex('progress', 'byProfile', IDBKeyRange.only(currentProfileId));
+  return rows.filter(r => r.firstAt && r.firstAt >= d.getTime()).length;
 }
 
 /** Весь прогресс текущего профиля одним запросом: entryId → запись. */
@@ -139,24 +182,29 @@ export async function progressStats(entryIds, map = null) {
     const p = pm ? pm.get(id) : await getProgress(id);
     if (!p) { counts.new++; continue; }
     counts[p.status] = (counts[p.status] || 0) + 1;
-    if (p.due <= now && p.status !== 'known') counts.due++;
+    // «к повторению» — ровно те слова, которые попадут в очередь (и «знаю», когда пришёл срок; новые без попыток — нет)
+    if (p.due <= now && !(p.status === 'new' && !p.reps)) counts.due++;
   }
   return counts;
 }
 
-/** Очередь на сегодня: просроченные вперёд, затем новые. */
-export async function buildQueue(entryIds, { limit = 20, onlyDue = false } = {}) {
+/**
+ * Очередь: сначала пора повторить (трудные, потом самые давние), затем новые — не больше newLimit.
+ * Новые без попыток («новое» по отметке, но не начатое) повторением не считаются.
+ */
+export async function buildQueue(entryIds, { limit = 20, onlyDue = false, newLimit = Infinity } = {}) {
   const now = Date.now();
-  const scored = [];
+  const due = [], fresh = [];
   const pm = entryIds.length > 50 ? await profileProgress() : null;
   for (const id of entryIds) {
     const p = pm ? pm.get(id) : await getProgress(id);
-    if (!p) { if (!onlyDue) scored.push({ id, rank: 2, due: now }); continue; }
-    if (p.due <= now) scored.push({ id, rank: p.status === 'hard' ? 0 : 1, due: p.due });
-    else if (!onlyDue && p.status === 'new') scored.push({ id, rank: 2, due: p.due });
+    if (!p || (p.status === 'new' && !p.reps)) { if (!onlyDue) fresh.push(id); continue; }
+    if (p.due <= now) due.push({ id, rank: p.status === 'hard' ? 0 : 1, due: p.due });
   }
-  scored.sort((a, b) => a.rank - b.rank || a.due - b.due);
-  return scored.slice(0, limit).map(s => s.id);
+  due.sort((a, b) => a.rank - b.rank || a.due - b.due);
+  const out = due.slice(0, limit).map(s => s.id);
+  const room = Math.max(0, Math.min(limit - out.length, newLimit));
+  return out.concat(fresh.slice(0, room));
 }
 
 /* ---------- заметки и дневник ---------- */

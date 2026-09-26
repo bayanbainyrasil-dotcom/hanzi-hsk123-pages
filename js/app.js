@@ -4,6 +4,7 @@ import * as store from './store.js';
 import * as migrate from './migrate.js';
 import * as recover from './recover.js';
 import * as speech from './speech.js';
+import * as P from './practice.js';
 import { uid } from './model.js';
 
 /* ---------- мелкие помощники ---------- */
@@ -11,7 +12,7 @@ const $ = (sel, root = document) => root.querySelector(sel);
 const view = $('#view');
 let swError = null;
 // номер запущенной версии: при публикации сборка подставляет сюда коммит (tools/build-site.mjs)
-const BUILD = '12ab243';
+const BUILD = '199595e';
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const html = (strings, ...vals) => strings.reduce((a, s, i) => a + s + (i < vals.length ? (Array.isArray(vals[i]) ? vals[i].join('') : vals[i] ?? '') : ''), '');
 
@@ -272,6 +273,9 @@ async function renderHome() {
   const total = ids.length || 1;
   const w = (n) => (n / total * 100).toFixed(2) + '%';
   const canStart = m.kind === 'hsk' ? (m.levels || []).length > 0 : !!m.lessonId;
+  const limit = await store.newPerDay();
+  const newLeft = Math.max(0, limit - await store.newStartedToday());
+  const saved = await loadDrill();
   const rec = await recover.somethingToRecover(store.profileId());
   const offerRecover = (rec.legacy && !(await recover.lastReport(store.profileId()))) || (!rec.mine && rec.other > 0);
 
@@ -300,7 +304,11 @@ async function renderHome() {
         <span><i class="dot c-new"></i>новые <b>${st.new}</b></span>
       </div>` : html`<div style="height:22px"></div>`}
 
-    <button class="btn primary block" data-act="start" ${canStart ? '' : 'disabled'}>${due ? `Продолжить · ${due} к повторению` : 'Начать'}</button>
+    ${saved ? html`<button class="btn primary block" data-act="resume">Продолжить занятие · ${saved.i + 1} из ${saved.ids.length}</button>
+      <button class="linkbtn center" data-act="start" ${canStart ? '' : 'disabled'}>Начать новое занятие</button>`
+    : html`<button class="btn primary block" data-act="start" ${canStart ? '' : 'disabled'}>Начать</button>`}
+    ${ids.length ? html`<p class="today muted small center">Повторить: <b>${due}</b> · новых сегодня: <b>${Math.min(newLeft, st.new)}</b>
+      <label>· лимит <select data-mode="new-limit" aria-label="Новых слов в день">${[3, 5, 8, 10, 15, 20].map(n => html`<option ${n === limit ? 'selected' : ''}>${n}</option>`)}</select> в день</label></p>` : ''}
     ${missing.length ? html`<p class="hint">${missing.map(LEVEL_LABEL).join(', ')} скачается при старте — один раз, дальше без сети.</p>` : ''}
     <button class="linkbtn center" data-act="start-quiz" ${canStart && ids.length >= 4 ? '' : 'disabled'}>Самопроверка: выбрать перевод</button>
     <button class="linkbtn center" data-act="mat-words" ${ids.length ? '' : 'disabled'}>Все слова материала</button>
@@ -325,7 +333,9 @@ async function startFromHome(mode) {
   }
   const ids = await materialIds(m);
   const scope = m.kind === 'textbook' ? m.lessonId : '__mat__';
-  return startDrill(scope, mode, { ids, from: 'home' });
+  // ежедневное занятие: сначала повторения, затем новые — не больше лимита на сегодня
+  const newLimit = Math.max(0, (await store.newPerDay()) - await store.newStartedToday());
+  return startDrill(scope, mode, { ids, from: 'home', newLimit });
 }
 
 /* ---------- учебник ---------- */
@@ -452,14 +462,26 @@ async function openWord(entryId, linkId = '') {
   const note = await store.getNote('entry', entryId);
   const lessons = await cat.entryLessons(entryId);
   const link = linkId ? await db.get('links', linkId) : null;
+  const mm = P.splitMeaning(e.ru);
+  // разбор по знакам — только справка: у знака своё значение, оно не равно смыслу слова
+  const chars = [];
+  if ([...e.hanzi].length > 1) for (const c of new Set([...e.hanzi])) {
+    const x = (await db.byIndex('entries', 'byHanzi', IDBKeyRange.only(c))).find(y => String(y.source).startsWith('hsk:') && !y.senseKey);
+    chars.push(x ? { h: c, p: x.pinyin, r: P.splitMeaning(x.ru).main } : { h: c, p: '', r: 'отдельно в словаре HSK нет' });
+  }
+  const pairs = await partnersOf(e);
   modal(html`<div class="wcard">
     <div class="hz">${esc(e.hanzi)}</div>
     <div class="py say-row"><span>${esc(e.pinyin)}</span>
       <button class="spk" data-act="say" data-text="${esc(e.hanzi)}" aria-label="Произнести">${SPEAKER}</button>
       <button class="spk slow" data-act="say" data-slow="1" data-text="${esc(e.hanzi)}" aria-label="Медленно">0,6×</button></div>
-    <div class="ru">${esc(e.ru)}${e.sense ? html` <span class="meta">(${esc(e.sense)})</span>` : ''}</div>
+    <div class="ru">${esc(mm.main)}${e.sense ? html` <span class="meta">(${esc(e.sense)})</span>` : ''}</div>
+    ${mm.rest.length ? html`<details class="more"><summary>Ещё значения</summary><p class="small">${esc(mm.rest.join('; '))}</p></details>` : ''}
+    ${chars.length ? html`<details class="more"><summary>По знакам — это не перевод слова</summary><ul class="small">${chars.map(c => html`<li><b>${esc(c.h)}</b> ${esc(c.p)} — ${esc(c.r)}</li>`)}</ul></details>` : ''}
     <div class="meta">${[e.hskLevel ? 'HSK ' + esc(e.hskLevel) : '', ...lessons.filter(l => l.kind !== 'hsk').map(l => '第' + l.number + '课')].filter(Boolean).join(' · ')}</div>
     ${link && String(link.source).startsWith('book:') ? html`<p class="muted small" style="margin-top:8px">Книга: стр. ${esc(link.page)} · ${esc(link.section || '')}${link.bookMeaning ? ` · в книге: «${esc(link.bookMeaning)}»` : ''}${link.context ? ` · ${esc(link.context)}` : ''}${link.note ? ` · ${esc(link.note)}` : ''}</p>` : ''}
+    ${pairNote(pairs)}
+    ${skillsLine(p)}
     ${await examplesBlock(e)}
     <div class="marks" style="margin:16px 0 8px">
       ${store.MARKS.map(m => html`<button class="mark" data-act="mark" data-id="${e.id}" data-mark="${m}" aria-pressed="${mark === m}">${store.MARK_RU[m]}</button>`)}
@@ -654,70 +676,247 @@ async function renderReview() {
 }
 
 /* ---------- занятие ---------- */
-async function startDrill(scope, mode = 'recall', { ids = null, from = null } = {}) {
-  let pool = ids;
-  if (!pool) {
-    if (scope === '__due__') pool = (await db.getAll('entries')).map(e => e.id);
-    else if (scope === '__all__') pool = (await db.getAll('entries')).map(e => e.id);
-    else if (scope === '__mat__') pool = await materialIds(await getMaterial());
-    else pool = (await cat.lessonEntries(scope)).map(e => e.id);
+// Голос путунхуа есть на устройстве — можно давать задания на слух. Иначе — текстовые, аудио не засчитывается.
+const DAY_MS = 86400000;
+const audioOK = () => typeof speechSynthesis !== 'undefined' && speech.zhVoices().length > 0;
+
+/* пары «не путать»: data/confusables.json (проверены тестом) */
+let pairIdxP = null;
+const pairIdx = () => (pairIdxP ||= cat.fetchJSON('data/confusables.json').then(P.pairIndex).catch(() => new Map()));
+/** Слова, с которыми это слово легко спутать, с проверенным пояснением. Только основное значение слова HSK. */
+async function partnersOf(e) {
+  if (!e) return [];
+  let base = e;
+  if (!String(e.source || '').startsWith('hsk:')) { base = e.hskId ? await cat.getEntry(e.hskId) : null; if (!base) return []; }
+  if (base.senseKey) return [];
+  const list = (await pairIdx()).get(base.hanzi) || [];
+  const out = [];
+  for (const { other, note } of list) {
+    const o = (await db.byIndex('entries', 'byHanzi', IDBKeyRange.only(other))).find(x => String(x.source).startsWith('hsk:') && !x.senseKey);
+    if (o) out.push({ entry: o, note });
   }
-  const queue = await store.buildQueue(pool, { limit: 20, onlyDue: scope === '__due__' });
-  if (!queue.length) return toast('Нечего повторять — на сегодня всё');
+  return out;
+}
+
+async function poolFor(scope) {
+  if (scope === '__due__' || scope === '__all__') return (await db.getAll('entries')).map(e => e.id);
+  if (scope === '__mat__') return materialIds(await getMaterial());
+  return (await cat.lessonEntries(scope)).map(e => e.id);
+}
+/** Пример для задания с пропуском: пример именно этого слова (по id), меньше всего незнакомых слов. */
+async function clozeFor(e, pm) {
+  const ex = await examplesForEntry(e).catch(() => null);
+  if (!ex) return null;
+  return P.bestCloze(ex.main, e.hskId || e.id, (id) => (pm || ex.pm).get(id)?.status === 'known');
+}
+
+async function startDrill(scope, mode = 'recall', { ids = null, from = null, newLimit = Infinity } = {}) {
+  const pool = ids || await poolFor(scope);
+  const queue = await store.buildQueue(pool, { limit: 20, onlyDue: scope === '__due__', newLimit });
+  if (!queue.length) return toast(newLimit === 0 ? 'На сегодня всё: повторять нечего, лимит новых слов исчерпан — его можно увеличить на главной' : 'Нечего повторять — на сегодня всё', 5000);
   const lessonId = scope.startsWith('__') ? null : scope;
+  const audio = audioOK();
+  const pm = await store.profileProgress();
+  // направление для каждого слова: самопроверка — по навыку, который проверялся реже; выбор — перевод или на слух
+  const dirs = [];
+  for (const [i, id] of queue.entries()) {
+    if (mode === 'quiz') { dirs.push(audio && i % 2 ? 'au' : 'hz'); continue; }
+    const p = pm.get(id);
+    const cloze = p?.reps ? !!(await clozeFor(await cat.getEntry(id), pm)) : false;
+    dirs.push(P.chooseDirection(p, { audio, cloze }));
+  }
   await store.startSession(lessonId);
-  state.drill = { ids: queue, pool, i: 0, mode, scope, lessonId, right: 0, almost: 0, wrong: 0, revealed: false, t0: Date.now(), from: from || (state.lessonId ? 'lesson' : state.view) };
+  state.drill = { ids: queue, dirs, pool, i: 0, mode, scope, lessonId, right: 0, almost: 0, wrong: 0, revealed: false, t0: Date.now(),
+    from: from || (state.lessonId ? 'lesson' : state.view), again: [], log: [] };
+  saveDrill();
   renderDrill(); scrollTo(0, 0);
 }
+/* незавершённое занятие хранится на устройстве: закрыли приложение — на главной «Продолжить занятие» */
+const drillKey = () => 'drill:' + store.profileId();
+async function saveDrill(ahead = 0) {
+  const d = state.drill;
+  if (d?.mode === 'sentence') return;                       // короткая практика предложений не трогает сохранённое занятие
+  try {
+    if (!d || d.finished || d.i + ahead >= d.ids.length) return await db.metaSet(drillKey(), null);
+    const { ids, dirs, mode, scope, lessonId, right, almost, wrong, again, log, from } = d;
+    await db.metaSet(drillKey(), { v: 1, ids, dirs, i: d.i + ahead, mode, scope, lessonId, right, almost, wrong, again, log, from, savedAt: Date.now() });
+  } catch {}
+}
+async function loadDrill() {
+  const s = await db.metaGet(drillKey(), null).catch(() => null);
+  return s && s.v === 1 && Array.isArray(s.ids) && s.i < s.ids.length ? s : null;
+}
+async function resumeDrill() {
+  const s = await loadDrill(); if (!s) return render();
+  await store.startSession(s.lessonId);
+  const known = ['__due__', '__all__', '__mat__'].includes(s.scope) || !String(s.scope).startsWith('__');
+  state.drill = { ...s, pool: known ? await poolFor(s.scope) : s.ids, revealed: false, t0: Date.now() };
+  renderDrill(); scrollTo(0, 0);
+}
+
+/** Итог: что повторено, что было трудно, что дальше. Без наград и рейтингов. */
+async function renderSummary(d) {
+  const s = await store.endSession();
+  d.finished = true; saveDrill();
+  if (d.mode === 'sentence') {
+    view.innerHTML = html`<div class="center"><h1>Предложения</h1>
+      <p class="lede">понял ${d.right} · почти ${d.almost} · не понял ${d.wrong}</p>
+      <button class="btn primary block" data-act="again">Ещё заход</button>
+      <button class="linkbtn center" data-act="stop-drill">${d.from === 'lesson' ? 'К уроку' : 'На главную'}</button></div>`;
+    return;
+  }
+  const secs = Math.round(((s?.endedAt || Date.now()) - (s?.startedAt || Date.now())) / 1000);
+  const log = d.log || [];
+  const words = [...new Set(log.map(x => x.id))];
+  const hardIds = words.filter(id => log.some(x => x.id === id && x.res !== 'ok'));
+  const hard = (await Promise.all(hardIds.map(id => cat.getEntry(id)))).filter(Boolean);
+  const pool = d.pool || [];
+  const pm = await store.profileProgress();
+  const dueNow = pool.filter(id => { const p = pm.get(id); return p && p.reps && p.due <= Date.now(); }).length;
+  const soon = await store.dueWithin(pool, DAY_MS);
+  const self = log.filter(x => x.chosen === undefined), choice = log.filter(x => x.chosen !== undefined);
+  const byDir = (dir) => self.filter(x => x.dir === dir).length;
+  view.innerHTML = html`<div class="summary">
+    <h1>Итог занятия</h1>
+    <p class="lede">${words.length} ${plural(words.length, 'слово', 'слова', 'слов')} · ${secs < 60 ? secs + ' с' : Math.round(secs / 60) + ' мин'}</p>
+    ${self.length ? html`<p class="small">По вашей оценке: знаю ${self.filter(x => x.res === 'ok').length} · почти ${self.filter(x => x.res === 'almost').length} · не знаю ${self.filter(x => x.res === 'bad').length}
+      <span class="muted">(иероглифы ${byDir('hz')} · по смыслу ${byDir('ru')} · на слух ${byDir('au')} · в предложении ${byDir('use')})</span></p>` : ''}
+    ${choice.length ? html`<p class="small">Выбор из вариантов: верно ${choice.filter(x => x.res === 'ok').length} · неверно ${choice.filter(x => x.res !== 'ok').length} <span class="muted">— это узнавание, не уверенное знание</span></p>` : ''}
+    ${hard.length ? html`<div class="label" style="margin-top:14px">Было трудно</div>
+      <div class="list">${hard.map(e => html`<button class="word card tight" data-act="word" data-id="${e.id}"><span class="hz">${esc(e.hanzi)}</span><span class="grow"><span class="py">${esc(e.pinyin)}</span> <span class="small">${esc(P.splitMeaning(e.ru).main)}</span></span></button>`)}</div>
+      <p class="muted small">Эти слова вернутся раньше: через 10 минут («не знаю») или завтра («почти»).</p>` : html`<p class="small ok">Трудных слов в этом занятии не было.</p>`}
+    <div class="label" style="margin-top:14px">Дальше</div>
+    <p class="small">${dueNow ? `Пора повторить ещё: <b>${dueNow}</b> — можно сделать ещё заход сейчас или позже.` : 'Всё, что пора было повторить, повторено.'}
+      ${soon ? ` В ближайшие сутки подойдёт ещё ${soon}.` : ''}</p>
+    ${dueNow ? html`<button class="btn primary block" data-act="again">Ещё заход</button>` : ''}
+    <button class="${dueNow ? 'linkbtn center' : 'btn primary block'}" data-act="stop-drill">${d.from === 'lesson' ? 'К уроку' : 'На главную'}</button>
+  </div>`;
+}
+
+const DIR_PROMPT = {
+  hz: 'Вспомните чтение и значение', ru: 'Вспомните слово по-китайски: иероглифы и чтение',
+  au: 'Послушайте и вспомните слово: значение и как пишется'
+};
+/** Ответ после «Показать» / выбора: слово целиком, пиньинь, основное значение первым, звук. */
+function answerBlock(e, { big = false } = {}) {
+  const m = P.splitMeaning(e.ru);
+  return html`<div class="ans">
+    ${big ? html`<div class="hzans" lang="zh-CN">${esc(e.hanzi)}</div>` : ''}
+    <div class="py say-row"><span>${esc(e.pinyin)}</span>
+      <button class="spk" data-act="say" data-text="${esc(e.hanzi)}" aria-label="Произнести">${SPEAKER}</button>
+      <button class="spk slow" data-act="say" data-slow="1" data-text="${esc(e.hanzi)}" aria-label="Медленно">0,6×</button></div>
+    <div class="ru">${esc(m.main)}</div>${m.rest.length ? html`<div class="ru-rest muted small">${esc(m.rest.join('; '))}</div>` : ''}
+  </div>`;
+}
+/** Строка навыков: что и сколько раз проверялось (самооценка и выбор — отдельно). Старые записи — без разделения. */
+function skillsLine(p) {
+  if (!p?.reps) return '';
+  const k = p.skills || {};
+  const one = (s, label) => { const x = k[s]; return x?.n ? `${label} ${x.ok}/${x.n}` : `${label} —`; };
+  const parts = [one('rec', 'иероглифы'), one('prod', 'по смыслу'), one('listen', 'на слух'), one('use', 'в предложении')];
+  const legacy = !p.skills ? ` · раньше: ${p.reps} ${plural(p.reps, 'ответ', 'ответа', 'ответов')} без разделения по навыкам` : '';
+  const choice = k.choice?.n ? ` · выбор перевода ${k.choice.ok}/${k.choice.n}` : '';
+  return html`<p class="skills muted small">Знаю / проверено: ${esc(parts.join(' · '))}${esc(choice)}${esc(legacy)}</p>`;
+}
+const pairNote = (ps) => ps.length ? html`<div class="pairs small">${ps.map(p => html`<p><b>Не путать:</b> ${esc(p.note)}</p>`)}</div>` : '';
 
 async function renderDrill() {
   const d = state.drill;
   if (!d) return render();
-  if (d.i >= d.ids.length) {
-    const s = await store.endSession();
-    const secs = Math.round(((s?.endedAt || Date.now()) - (s?.startedAt || Date.now())) / 1000);
-    view.innerHTML = html`<div class="center">
-      <div class="bigseal">好</div>
-      <h1>${d.right + d.almost + d.wrong} ${plural(d.right + d.almost + d.wrong, 'слово', 'слова', 'слов')}</h1>
-      <p class="lede">знаю ${d.right} · почти ${d.almost} · не знаю ${d.wrong} · ${secs < 60 ? secs + ' с' : Math.round(secs / 60) + ' мин'}</p>
-      <button class="btn primary block" data-act="again">Ещё заход</button>
-      <button class="linkbtn center" data-act="stop-drill">${d.from === 'lesson' ? 'К уроку' : 'На главную'}</button>
-    </div>`;
-    d.finished = true;
-    return;
-  }
+  if (d.i >= d.ids.length) return renderSummary(d);
   if (d.mode === 'sentence') return renderSentence(d);
   const e = await cat.getEntry(d.ids[d.i]);
   if (!e) { d.i++; return renderDrill(); }
   const tag = e.hskLevel ? 'HSK ' + e.hskLevel : (d.lessonId ? 'урок' : '');
   const top = html`<div class="drill-top"><button class="linkbtn" data-act="stop-drill">← закончить</button><span>${d.i + 1} / ${d.ids.length}</span></div>`;
-  const sheet = html`<div class="sheet" role="button" tabindex="0" data-act="reveal" aria-label="Показать ответ"><i class="gv"></i><i class="gh"></i>
-    ${tag ? html`<span class="tag">${esc(tag)}</span>` : ''}
-    <span class="char ${[...e.hanzi].length > 2 ? 'long' : ''}">${esc(e.hanzi)}</span>
-    <button class="sound" data-act="say" data-text="${esc(e.hanzi)}" aria-label="Произнести">${SPEAKER}</button></div>`;
-  d.say = e.hanzi;
+  let dir = d.dirs?.[d.i] || 'hz';
+  let note = '';
+  if (dir === 'au' && !audioOK()) { dir = d.dirs[d.i] = 'hz'; note = 'Голоса путунхуа на устройстве нет — задание на слух заменено текстовым.'; }
+  let cz = null;
+  if (dir === 'use') { cz = await clozeFor(e); if (!cz) dir = d.dirs[d.i] = 'hz'; }
+  d.dir = dir; d.say = cz ? cz.ex.zh : e.hanzi;
+  if (cz) return renderCloze(d, e, cz, top);
+  // лицевая сторона: только то, что не раскрывает ответ (звук — лишь в задании на слух)
+  const face = dir === 'ru'
+    ? html`<span class="ru-q">${esc(e.ru)}</span>${e.pos ? html`<span class="muted small">${esc(e.pos)}</span>` : ''}`
+    : dir === 'au'
+      ? html`<div class="listen"><button class="btn primary" data-act="say" data-text="${esc(e.hanzi)}">${SPEAKER} Прослушать</button><button class="btn" data-act="say" data-slow="1" data-text="${esc(e.hanzi)}">медленно</button></div>`
+      : html`<span class="char ${[...e.hanzi].length > 2 ? 'long' : ''}">${esc(e.hanzi)}</span>`;
+  const sheet = html`<div class="sheet" data-dir="${dir}" ${dir === 'au' ? '' : 'role="button" tabindex="0" data-act="reveal" aria-label="Показать ответ"'}><i class="gv"></i><i class="gh"></i>
+    ${tag ? html`<span class="tag">${esc(tag)}</span>` : ''}${face}</div>`;
 
-  if (d.mode === 'quiz') {
-    const others = (await db.getAll('entries')).filter(x => x.id !== e.id && x.ru && x.ru !== e.ru);
-    d.options = shuffle([e, ...shuffle(others).slice(0, 3)]);
-    view.innerHTML = html`${top}${sheet}
-      <div class="ans"><div class="py">${esc(e.pinyin)}</div></div>
-      <div class="choices">${d.options.map(o => html`<button data-act="answer" data-id="${o.id}">${esc(o.ru)}</button>`)}</div>`;
-    return;
-  }
+  if (d.mode === 'quiz') return renderQuiz(d, e, top, dir, note);
+
   view.innerHTML = html`${top}
     ${sheet}
-    ${d.revealed ? html`<div class="ans">
-        <div class="py">${esc(e.pinyin)}</div>
-        <div class="ru">${esc(e.ru)}</div>
-      </div>
+    ${note ? html`<p class="muted small center">${esc(note)}</p>` : ''}
+    ${d.revealed ? html`${dir === 'hz' ? answerBlock(e) : answerBlock(e, { big: true })}
+      ${pairNote(await partnersOf(e))}
+      <p class="muted small center" style="margin:10px 0 4px">Оцените себя — это самооценка, не проверка</p>
       <div class="grades">
         <button class="g0" data-act="grade" data-ok="0">Не знаю</button>
         <button class="g1" data-act="grade" data-ok="half">Почти</button>
         <button class="g2" data-act="grade" data-ok="1">Знаю</button>
       </div>
       ${await examplesBlock(e, { limit: 1, extra: false, hint: false })}`
-    : html`<button class="btn primary block" data-act="reveal" style="margin-top:22px">Показать</button>`}`;
+    : html`<p class="muted small center">${esc(DIR_PROMPT[dir])}</p><button class="btn primary block" data-act="reveal" style="margin-top:12px">Показать</button>`}`;
+}
+
+/**
+ * Пропуск в предложении: проверенный пример этого слова, перевод — подсказка к смыслу; пиньинь и слово — после ответа.
+ * Незнакомые слова подчёркнуты. После ответа — полное предложение, пиньинь, перевод, обычная и медленная озвучка.
+ */
+async function renderCloze(d, e, cz, top) {
+  const pm = await store.profileProgress();
+  const known = (id) => pm.get(id)?.status === 'known';
+  exCache.set(cz.ex.id, cz.ex);
+  const face = cz.ex.toks.map((t, i) => i === cz.ti ? html`<span class="blank" aria-label="пропуск">${'　'.repeat([...t.h].length)}</span>`
+    : t.k ? html`<span class="${t.id && !known(t.id) ? 'unk' : ''}">${esc(t.h)}</span>` : esc(t.h)).join('');
+  view.innerHTML = html`${top}
+    <div class="sheet" data-dir="use"><span class="tag">${esc(LV_NAME(cz.ex.level))}</span><p class="exzh cloze" lang="zh-CN">${face}</p></div>
+    ${d.revealed ? html`<div class="exs fixed">${exampleHTML(cz.ex, pm, { practice: false })}</div>
+      ${answerBlock(e, { big: true })}
+      <p class="muted small center" style="margin:10px 0 4px">Оцените себя — это самооценка, не проверка</p>
+      <div class="grades">
+        <button class="g0" data-act="grade" data-ok="0">Не знаю</button>
+        <button class="g1" data-act="grade" data-ok="half">Почти</button>
+        <button class="g2" data-act="grade" data-ok="1">Знаю</button>
+      </div>`
+    : html`<p class="exru center">${esc(cz.ex.ru)}</p>
+      <p class="muted small center">Вспомните пропущенное слово${cz.unknown.length ? ` · пунктиром — незнакомые слова (${cz.unknown.length})` : ''}</p>
+      <button class="btn primary block" data-act="reveal" style="margin-top:12px">Показать</button>`}`;
+}
+
+/** Выбор из вариантов: перевод к иероглифам или слово на слух. После ответа — разбор, без автоперехода. */
+async function renderQuiz(d, e, top, dir, note) {
+  if (!d.opts) d.opts = {};
+  if (!d.opts[d.i]) {
+    const ps = await partnersOf(e);
+    const poolIds = [...new Set(d.pool)];
+    const poolEntries = (await Promise.all(poolIds.slice(0, 3000).map(id => cat.getEntry(id)))).filter(Boolean);
+    const extra = ps.map(p => p.entry).filter(x => !poolEntries.some(y => y.id === x.id));
+    const dis = P.pickDistractors(e, [...extra, ...poolEntries], { kind: dir === 'au' ? 'sound' : 'meaning', partners: ps.map(p => p.entry.id) });
+    d.opts[d.i] = { ids: shuffle([e.id, ...dis.map(x => x.id)]), partners: ps };
+  }
+  const o = d.opts[d.i];
+  const opts = (await Promise.all(o.ids.map(id => cat.getEntry(id)))).filter(Boolean);
+  const fb = d.fb && d.fb.i === d.i ? d.fb : null;
+  const face = dir === 'au'
+    ? html`<div class="listen"><button class="btn primary" data-act="say" data-text="${esc(e.hanzi)}">${SPEAKER} Прослушать</button><button class="btn" data-act="say" data-slow="1" data-text="${esc(e.hanzi)}">медленно</button></div>`
+    : html`<span class="char ${[...e.hanzi].length > 2 ? 'long' : ''}">${esc(e.hanzi)}</span>`;
+  const optLabel = (x) => dir === 'au' ? html`<span lang="zh-CN" class="opt-hz">${esc(x.hanzi)}</span>` : esc(P.splitMeaning(x.ru).main);
+  view.innerHTML = html`${top}
+    <div class="sheet" data-dir="${dir}"><i class="gv"></i><i class="gh"></i>${face}</div>
+    ${note ? html`<p class="muted small center">${esc(note)}</p>` : ''}
+    <p class="muted small center">${dir === 'au' ? 'Какое слово прозвучало?' : 'Выберите перевод'}</p>
+    <div class="choices">${opts.map(x => html`<button data-act="answer" data-id="${x.id}" ${fb ? 'disabled' : ''} class="${fb ? (x.id === e.id ? 'right' : x.id === fb.chosen ? 'wrong' : '') : ''}">${optLabel(x)}</button>`)}</div>
+    ${fb ? html`<div class="feedback">
+        <p class="small ${fb.correct ? 'ok' : 'err'}">${fb.correct ? 'Верно — выбор засчитан как узнавание, не как уверенное знание.' : 'Неверно.'}</p>
+        ${answerBlock(e, { big: true })}
+        ${!fb.correct && fb.chosenEntry ? html`<div class="ans alt"><div class="muted small">Вы выбрали:</div><div class="hzans small-hz" lang="zh-CN">${esc(fb.chosenEntry.hanzi)}</div><div class="py">${esc(fb.chosenEntry.pinyin)}</div><div class="ru">${esc(P.splitMeaning(fb.chosenEntry.ru).main)}</div></div>` : ''}
+        ${!fb.correct && fb.pair ? html`<div class="pairs small"><p><b>Отличие:</b> ${esc(fb.pair)}</p></div>` : ''}
+        <button class="btn primary block" data-act="next">Дальше</button>
+      </div>` : ''}`;
 }
 async function renderSentence(d) {
   const x = d.items[d.i];
@@ -903,6 +1102,7 @@ async function onViewClick(ev) {
     await setMaterial(m); return render();
   }
   if (act === 'start') return startFromHome('recall');
+  if (act === 'resume') return resumeDrill();
   if (act === 'start-quiz') return startFromHome('quiz');
   if (act === 'mat-words') { state.lessonId = '__mat__'; return render(); }
   if (act === 'word') return openWord(id, b.dataset.link);
@@ -965,31 +1165,52 @@ async function onViewClick(ev) {
     if (autoSpeakOn && d.say) speech.speak(d.say);           // из самого нажатия — так требует Safari на iPhone
     return renderDrill();
   }
-  if (act === 'again') { const d = state.drill; state.drill = null; if (d.mode === 'sentence') return startSentenceDrill(d.sentenceOf); return startDrill(d.scope, d.mode, { ids: d.pool, from: d.from }); }
+  if (act === 'again') {
+    const d = state.drill; state.drill = null;
+    if (d.mode === 'sentence') return startSentenceDrill(d.sentenceOf);
+    const newLimit = d.from === 'home' ? Math.max(0, (await store.newPerDay()) - await store.newStartedToday()) : Infinity;
+    return startDrill(d.scope, d.mode, { ids: d.pool, from: d.from, newLimit });
+  }
   if (act === 'stop-drill') {
     const d = state.drill; if (!d?.finished) await store.endSession();
-    state.drill = null;
+    state.drill = null; if (d && d.mode !== 'sentence') await db.metaSet(drillKey(), null).catch(() => {});      // закончил сам — продолжать нечего
     if (d?.from === 'lesson' && d.lessonId) state.lessonId = d.lessonId; else if (d?.from === 'home') state.view = 'home';
     return render();
   }
   if (act === 'grade') {
-    const d = state.drill; if (!d || b.disabled) return;
+    const d = state.drill; if (!d || b.disabled || d.busy) return;
     const ok = b.dataset.ok === '1', almost = b.dataset.ok === 'half';
-    view.querySelectorAll('[data-act="grade"]').forEach(x => { x.disabled = true; });
+    d.busy = true; view.querySelectorAll('[data-act="grade"]').forEach(x => { x.disabled = true; });
     const sent = d.mode === 'sentence' ? d.items[d.i] : null;
-    try { await store.recordAttempt({ entryId: sent ? sent.tid : d.ids[d.i], lessonId: d.lessonId, correct: ok, almost, mode: sent ? 'sentence' : 'recall', answer: sent ? sent.id : '', ms: Date.now() - d.t0 }); }
-    catch { view.querySelectorAll('[data-act="grade"]').forEach(x => { x.disabled = false; }); return; }  // не записалось — ответ можно повторить
-    ok ? d.right++ : almost ? d.almost++ : d.wrong++; d.i++; d.revealed = false; d.t0 = Date.now(); return renderDrill();
+    const dir = d.dir || 'hz', entryId = sent ? sent.tid : d.ids[d.i];
+    try { await store.recordAttempt({ entryId, lessonId: d.lessonId, correct: ok, almost, mode: sent ? 'sentence' : P.DIRS[dir].mode, answer: sent ? sent.id : '', ms: Date.now() - d.t0 }); }
+    catch { d.busy = false; view.querySelectorAll('[data-act="grade"]').forEach(x => { x.disabled = false; }); return; }  // не записалось — ответ можно повторить
+    ok ? d.right++ : almost ? d.almost++ : d.wrong++;
+    if (!sent) {
+      d.log?.push({ id: entryId, dir, res: ok ? 'ok' : almost ? 'almost' : 'bad' });
+      if (!ok && !almost && !d.again.includes(entryId)) { d.again.push(entryId); d.ids.push(entryId); d.dirs.push('hz'); }   // «не знаю» — ещё раз в конце занятия
+    }
+    d.i++; d.revealed = false; d.t0 = Date.now(); d.busy = false; saveDrill(); return renderDrill();
   }
   if (act === 'answer') {
-    const d = state.drill; const correct = id === d.ids[d.i];
-    view.querySelectorAll('[data-act="answer"]').forEach(x => { x.disabled = true; });
-    try { await store.recordAttempt({ entryId: d.ids[d.i], lessonId: d.lessonId, correct, mode: 'quiz', answer: id, ms: Date.now() - d.t0 }); }
-    catch { view.querySelectorAll('[data-act="answer"]').forEach(x => { x.disabled = false; }); return; }
+    const d = state.drill; if (!d || d.busy || (d.fb && d.fb.i === d.i)) return;
+    const target = d.ids[d.i], correct = id === target, dir = d.dirs?.[d.i] || 'hz';
+    d.busy = true; view.querySelectorAll('[data-act="answer"]').forEach(x => { x.disabled = true; });
+    try { await store.recordAttempt({ entryId: target, lessonId: d.lessonId, correct, mode: dir === 'au' ? 'quiz-au' : 'quiz', answer: id, ms: Date.now() - d.t0 }); }
+    catch { d.busy = false; view.querySelectorAll('[data-act="answer"]').forEach(x => { x.disabled = false; }); return; }
     correct ? d.right++ : d.wrong++;
-    b.classList.add(correct ? 'right' : 'wrong');
-    view.querySelectorAll('[data-act="answer"]').forEach(x => { x.disabled = true; if (x.dataset.id === d.ids[d.i]) x.classList.add('right'); });
-    setTimeout(() => { d.i++; d.t0 = Date.now(); renderDrill(); }, correct ? 450 : 1100); return;
+    d.log?.push({ id: target, dir, res: correct ? 'ok' : 'bad', chosen: id });
+    const chosenEntry = correct ? null : await cat.getEntry(id);
+    const pair = correct ? null : d.opts?.[d.i]?.partners.find(p => p.entry.id === id)?.note || null;   // объяснение — только для проверенной пары
+    if (!correct && !d.again.includes(target)) { d.again.push(target); d.ids.push(target); d.dirs.push(dir); }
+    d.fb = { i: d.i, chosen: id, correct, chosenEntry, pair };
+    saveDrill(1);                                                 // ответ записан: при продолжении — следующее слово
+    if (autoSpeakOn) speech.speak(d.say);                        // из нажатия: после ответа слово звучит
+    d.busy = false; return renderDrill();
+  }
+  if (act === 'next') {
+    const d = state.drill; if (!d || !d.fb || d.fb.i !== d.i) return;
+    d.i++; d.t0 = Date.now(); d.fb = null; saveDrill(); return renderDrill();
   }
   if (act === 'add-word') return openAddWord(id);
   if (act === 'import-lesson') return openImport({ lessonId: id, collectionId: cat.TEXTBOOK_ID });
@@ -1028,6 +1249,7 @@ async function onViewClick(ev) {
 }
 
 async function onViewChange(ev) {
+  if (ev.target.dataset?.mode === 'new-limit') { await store.setNewPerDay(ev.target.value); return render(); }
   if (ev.target.dataset?.mode === 'autospeak') { autoSpeakOn = ev.target.checked; await db.metaSet('autoSpeak', ev.target.checked); return; }
   if (ev.target.dataset?.mode === 'rc-src') { const s = state.rc.sel; ev.target.checked ? s.add(ev.target.dataset.id) : s.delete(ev.target.dataset.id); return render(); }
   if (ev.target.dataset?.mode === 'rc-target') { state.rc.target = ev.target.value; return render(); }

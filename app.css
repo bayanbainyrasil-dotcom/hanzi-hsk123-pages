@@ -229,3 +229,29 @@ dialog.pop::backdrop{background:rgba(0,0,0,.5)}
 .spk{display:inline-flex;align-items:center;justify-content:center;min-width:44px;height:44px;padding:0 10px;border:1px solid var(--edge);border-radius:22px;background:var(--stone-2);color:var(--cinnabar);font:inherit;font-size:.8rem}
 .spk.slow{color:var(--mute)}
 .sound svg{display:block;margin:auto}
+/* задания вспоминания: смысл → слово, на слух; разбор после ответа */
+.sheet .ru-q{position:relative;padding:0 26px;text-align:center;font-size:clamp(1.15rem,5.4vw,1.5rem);line-height:1.4;color:#16181c;overflow-wrap:anywhere}
+.sheet .ru-q + .muted{position:relative;display:block;margin-top:8px;color:#8d8778}
+.sheet .listen{position:relative;display:flex;flex-direction:column;gap:10px;align-items:center}
+.sheet .listen .btn{min-width:170px;display:inline-flex;gap:8px;align-items:center;justify-content:center}
+.ans .hzans{font-size:clamp(44px,15vw,72px);line-height:1.1;margin-bottom:6px}
+.ans .hzans.small-hz{font-size:2rem}
+.ans .ru-rest{margin-top:4px}
+.ans.alt{margin-top:14px;padding-top:12px;border-top:1px solid var(--edge)}
+.ans .say-row{display:flex;gap:8px;align-items:center;justify-content:center}
+.choices .opt-hz{font-size:1.6rem}
+.feedback{margin-top:14px}
+.feedback .ok{color:var(--green)}
+.pairs{margin:12px 0 0;padding:10px 12px;border-left:2px solid var(--amber);background:var(--stone);border-radius:var(--r)}
+.pairs p{margin:0}.pairs p + p{margin-top:6px}
+.sheet[data-dir="ru"]{flex-direction:column}
+/* пропуск в предложении */
+.sheet[data-dir="use"]{aspect-ratio:auto;min-height:170px;padding:34px 20px 22px;flex-direction:column}
+.sheet .exzh.cloze{position:relative;margin:0;font-size:clamp(1.35rem,6.4vw,1.8rem);line-height:1.7;color:#16181c;text-align:center;overflow-wrap:anywhere}
+.cloze .blank{display:inline-block;min-width:2.2em;border-bottom:2px solid var(--cinnabar);margin:0 .12em}
+.cloze .unk{border-bottom:1px dashed #9a937f}
+.exru.center{text-align:center;margin:14px 0 4px}
+.today{margin:10px 0 0}.today select{font:inherit;background:var(--stone);color:inherit;border:1px solid var(--edge);border-radius:6px;padding:1px 4px}
+.summary .word{display:flex;gap:12px;align-items:center;width:100%;text-align:left}
+.summary .word .hz{font-size:1.6rem}
+.summary .ok{color:var(--green)}

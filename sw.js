@@ -1,6 +1,6 @@
 // Service worker: интерфейс и учебные файлы живут в Cache Storage,
 // прогресс — в IndexedDB. Обновление версии НИКОГДА не трогает IndexedDB.
-const VERSION = 'v25';
+const VERSION = 'v26';
 // Имена кэшей с префиксом приложения: на общем адресе (например, *.github.io) рядом живут другие сайты
 // со своими кэшами — трогаем только свои.
 const PREFIX = 'hanzi-hsk123-';
@@ -11,10 +11,10 @@ const OLD_DATA = 'data', OLD_SHELL = /^shell-v\d+$/;   // имена до v23 (�
 const SHELL_FILES = [
   './', './index.html', './app.css', './manifest.webmanifest', './icons/icon.svg',
   './icons/icon-180.png', './icons/icon-192.png', './icons/icon-512.png', './export-legacy.html',
-  './js/app.js', './js/db.js', './js/store.js', './js/catalog.js', './js/model.js', './js/migrate.js', './js/recover.js', './js/speech.js',
+  './js/app.js', './js/db.js', './js/store.js', './js/catalog.js', './js/model.js', './js/migrate.js', './js/recover.js', './js/speech.js', './js/practice.js',
   './data/textbook/basic-chinese-40/manifest.json', './data/hsk/index.json', './data/migration-v1-to-v2.json',
   // словарь уроков (words.json) в списке не указан: на публичном адресе его нет; где он есть — кэшируется при первом чтении
-  './data/demo/demo-ru.json', './data/examples/levels.json', './data/templates/textbook-import-template.csv'
+  './data/demo/demo-ru.json', './data/confusables.json', './data/examples/levels.json', './data/templates/textbook-import-template.csv'
 ];
 
 self.addEventListener('install', (e) => {
