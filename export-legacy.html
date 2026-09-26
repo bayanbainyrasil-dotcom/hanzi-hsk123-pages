@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Выгрузка старого прогресса</title>
+<style>
+  :root { color-scheme: light dark; --bg:#f7f6f2; --fg:#16161a; --muted:#666; --card:#fff; --line:#ddd; --acc:#2f7d5b; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#0f1115; --fg:#eceae4; --muted:#9a9a9a; --card:#181b21; --line:#2a2e36; --acc:#4fbf8b; } }
+  body { margin:0; background:var(--bg); color:var(--fg); font:16px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+  main { max-width:560px; margin:0 auto; padding:24px 16px 48px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:16px; margin:14px 0; }
+  button { font:inherit; padding:12px 16px; border-radius:10px; border:0; background:var(--acc); color:#fff; min-height:44px; width:100%; }
+  .muted { color:var(--muted); font-size:14px; }
+  table { width:100%; border-collapse:collapse; font-size:14px; } td { padding:4px 0; border-bottom:1px solid var(--line); }
+</style>
+</head>
+<body>
+<main>
+  <h1>Выгрузка старого прогресса</h1>
+  <p class="muted">Страница только читает данные прежней версии в этом браузере (ключи <code>hsk_profiles_v2</code> и <code>hsk_d_*</code>) и сохраняет их в файл. Ничего не удаляет и не меняет.</p>
+  <div class="card" id="summary">Проверяю…</div>
+  <button id="save" hidden>Скачать файл</button>
+  <p class="muted">Дальше: новое приложение → «Данные» → «Старая версия» → «Импорт файла старой версии».</p>
+  <p class="muted">На iPhone приложение, добавленное на экран «Домой», хранит данные отдельно от Safari. Открывайте эту страницу там же, где занимались.</p>
+</main>
+<script>
+(function () {
+  var dump = {}, profiles = [], n = 0;
+  try {
+    for (var i = 0; i < localStorage.length; i++) {
+      var k = localStorage.key(i);
+      if (k === 'hsk_profiles_v2' || /^hsk_d_/.test(k)) { dump[k] = localStorage.getItem(k); n++; }
+    }
+    profiles = JSON.parse(dump.hsk_profiles_v2 || '[]');
+  } catch (e) {
+    document.getElementById('summary').textContent = 'Хранилище браузера недоступно: ' + e.message;
+    return;
+  }
+  var box = document.getElementById('summary');
+  if (!n) { box.textContent = 'В этом браузере на этом адресе старых данных нет.'; return; }
+  var rows = (Array.isArray(profiles) ? profiles : []).map(function (p) {
+    var d = {}; try { d = JSON.parse(dump['hsk_d_' + p.id] || '{}'); } catch (e) {}
+    var cnt = d && d.prog ? Object.keys(d.prog).length : 0;
+    return '<tr><td>' + String(p.name || 'Профиль').replace(/[<&]/g, '') + '</td><td>' + cnt + ' слов</td></tr>';
+  }).join('');
+  box.innerHTML = '<b>Найдено ключей: ' + n + '</b><table>' + rows + '</table>';
+  var btn = document.getElementById('save');
+  btn.hidden = false;
+  btn.onclick = function () {
+    var file = { format: 'hanzi-hsk123/legacy-localstorage@1', origin: location.origin, exportedAt: new Date().toISOString(), localStorage: dump };
+    var blob = new Blob([JSON.stringify(file, null, 1)], { type: 'application/json' });
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'hanzi-old-progress-' + new Date().toISOString().slice(0, 10) + '.json';
+    document.body.appendChild(a); a.click(); a.remove();
+  };
+})();
+</script>
+</body>
+</html>

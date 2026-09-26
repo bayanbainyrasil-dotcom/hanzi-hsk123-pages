@@ -1,0 +1,21 @@
+{
+ "schema": "hanzi-hsk123/examples-index@1",
+ "levels": [
+  {
+   "level": "hsk1",
+   "stamp": "bfb4f09a7119",
+   "words": 300,
+   "covered": 300,
+   "one": 0,
+   "examples": 625
+  },
+  {
+   "level": "hsk2",
+   "stamp": "46bfa72d9393",
+   "words": 200,
+   "covered": 200,
+   "one": 0,
+   "examples": 407
+  }
+ ]
+}

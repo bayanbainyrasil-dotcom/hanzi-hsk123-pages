@@ -1,0 +1,738 @@
+{
+  "schema": "hanzi-hsk123/textbook-manifest@1",
+  "id": "bc40",
+  "titleZh": "基础汉语40课（第二版）",
+  "titleEn": "40 Lessons for Basic Chinese Course",
+  "titleRu": "Базовый курс китайского языка, 40 уроков (2-е издание)",
+  "nickname": "пекинская книга",
+  "edition": "第二版 (2-е издание)",
+  "variant": "畅听版 (издание с аудио)",
+  "editors": [
+    "陈绥宁 (Chen Suining)",
+    "沈萌萌 (Shen Mengmeng)"
+  ],
+  "publisher": "华东师范大学出版社 (East China Normal University Press)",
+  "pronunciation": {
+    "standard": "putonghua",
+    "romanization": "pinyin-with-tone-marks"
+  },
+  "volumes": [
+    {
+      "id": "shang",
+      "titleZh": "上册",
+      "titleRu": "Том 1",
+      "isbn": "9787567591905",
+      "published": "2019-10",
+      "price": "¥78.00",
+      "lessons": "1–20",
+      "source": "aijiaocai-715358"
+    },
+    {
+      "id": "xia",
+      "titleZh": "下册",
+      "titleRu": "Том 2",
+      "isbn": "9787567591103",
+      "published": "2019-10",
+      "price": "¥80.00",
+      "lessons": "21–40",
+      "source": "aijiaocai-280711"
+    }
+  ],
+  "sources": [
+    {
+      "id": "aijiaocai-715358",
+      "kind": "catalogue",
+      "title": "基础汉语40课（上册）（第二版） — карточка издания с оглавлением",
+      "url": "https://www.aijiaocai.com/textbook/details?textbook_id=715358",
+      "retrieved": "2026-09-22"
+    },
+    {
+      "id": "aijiaocai-280711",
+      "kind": "catalogue",
+      "title": "基础汉语40课（下册）（第二版） — карточка издания с оглавлением",
+      "url": "https://www.aijiaocai.com/shopfront/textbook/index?dealer_book_id=280711",
+      "retrieved": "2026-09-22"
+    }
+  ],
+  "lessons": [
+    {
+      "id": "bc40.l01",
+      "volume": "shang",
+      "number": 1,
+      "titleZh": "语音一",
+      "page": 1,
+      "titleRu": null,
+      "vocabularyStatus": "empty",
+      "wordCount": 0,
+      "sources": [
+        "aijiaocai-715358"
+      ],
+      "note": "Номер, китайское название и страница подтверждены оглавлением издания. Список слов урока не подтверждён — требуется импорт."
+    },
+    {
+      "id": "bc40.l02",
+      "volume": "shang",
+      "number": 2,
+      "titleZh": "语音二",
+      "page": 13,
+      "titleRu": null,
+      "vocabularyStatus": "empty",
+      "wordCount": 0,
+      "sources": [
+        "aijiaocai-715358"
+      ],
+      "note": "Номер, китайское название и страница подтверждены оглавлением издания. Список слов урока не подтверждён — требуется импорт."
+    },
+    {
+      "id": "bc40.l03",
+      "volume": "shang",
+      "number": 3,
+      "titleZh": "语音三",
+      "page": 25,
+      "titleRu": null,
+      "vocabularyStatus": "empty",
+      "wordCount": 0,
+      "sources": [
+        "aijiaocai-715358"
+      ],
+      "note": "Номер, китайское название и страница подтверждены оглавлением издания. Список слов урока не подтверждён — требуется импорт."
+    },
+    {
+      "id": "bc40.l04",
+      "volume": "shang",
+      "number": 4,
+      "titleZh": "语音四",
+      "page": 37,
+      "titleRu": null,
+      "vocabularyStatus": "empty",
+      "wordCount": 0,
+      "sources": [
+        "aijiaocai-715358"
+      ],
+      "note": "Номер, китайское название и страница подтверждены оглавлением издания. Список слов урока не подтверждён — требуется импорт."
+    },
+    {
+      "id": "bc40.l05",
+      "volume": "shang",
+      "number": 5,
+      "titleZh": "语音五",
+      "page": 49,
+      "titleRu": null,
+      "vocabularyStatus": "empty",
+      "wordCount": 0,
+      "sources": [
+        "aijiaocai-715358"
+      ],
+      "note": "Номер, китайское название и страница подтверждены оглавлением издания. Список слов урока не подтверждён — требуется импорт."
+    },
+    {
+      "id": "bc40.l06",
+      "volume": "shang",
+      "number": 6,
+      "titleZh": "我的家",
+      "page": 67,
+      "titleRu": null,
+      "vocabularyStatus": "empty",
+      "wordCount": 0,
+      "sources": [
+        "aijiaocai-715358"
+      ],
+      "note": "Номер, китайское название и страница подтверждены оглавлением издания. Список слов урока не подтверждён — требуется импорт."
+    },
+    {
+      "id": "bc40.l07",
+      "volume": "shang",
+      "number": 7,
+      "titleZh": "我的学校",
+      "page": 81,
+      "titleRu": null,
+      "vocabularyStatus": "empty",
+      "wordCount": 0,
+      "sources": [
+        "aijiaocai-715358"
+      ],
+      "note": "Номер, китайское название и страница подтверждены оглавлением издания. Список слов урока не подтверждён — требуется импорт."
+    },
+    {
+      "id": "bc40.l08",
+      "volume": "shang",
+      "number": 8,
+      "titleZh": "我们的宿舍",
+      "page": 97,
+      "titleRu": null,
+      "vocabularyStatus": "empty",
+      "wordCount": 0,
+      "sources": [
+        "aijiaocai-715358"
+      ],
+      "note": "Номер, китайское название и страница подтверждены оглавлением издания. Список слов урока не подтверждён — требуется импорт."
+    },
+    {
+      "id": "bc40.l09",
+      "volume": "shang",
+      "number": 9,
+      "titleZh": "我的一天",
+      "page": 111,
+      "titleRu": null,
+      "vocabularyStatus": "empty",
+      "wordCount": 0,
+      "sources": [
+        "aijiaocai-715358"
+      ],
+      "note": "Номер, китайское название и страница подтверждены оглавлением издания. Список слов урока не подтверждён — требуется импорт."
+    },
+    {
+      "id": "bc40.l10",
+      "volume": "shang",
+      "number": 10,
+      "titleZh": "我的生活",
+      "page": 127,
+      "titleRu": null,
+      "vocabularyStatus": "empty",
+      "wordCount": 0,
+      "sources": [
+        "aijiaocai-715358"
+      ],
+      "note": "Номер, китайское название и страница подтверждены оглавлением издания. Список слов урока не подтверждён — требуется импорт."
+    },
+    {
+      "id": "bc40.l11",
+      "volume": "shang",
+      "number": 11,
+      "titleZh": "去超市买东西",
+      "page": 151,
+      "titleRu": null,
+      "vocabularyStatus": "empty",
+      "wordCount": 0,
+      "sources": [
+        "aijiaocai-715358"
+      ],
+      "note": "Номер, китайское название и страница подтверждены оглавлением издания. Список слов урока не подтверждён — требуется импорт."
+    },
+    {
+      "id": "bc40.l12",
+      "volume": "shang",
+      "number": 12,
+      "titleZh": "新同学",
+      "page": 169,
+      "titleRu": null,
+      "vocabularyStatus": "empty",
+      "wordCount": 0,
+      "sources": [
+        "aijiaocai-715358"
+      ],
+      "note": "Номер, китайское название и страница подтверждены оглавлением издания. Список слов урока не подтверждён — требуется импорт."
+    },
+    {
+      "id": "bc40.l13",
+      "volume": "shang",
+      "number": 13,
+      "titleZh": "愉快的周末",
+      "page": 189,
+      "titleRu": null,
+      "vocabularyStatus": "empty",
+      "wordCount": 0,
+      "sources": [
+        "aijiaocai-715358"
+      ],
+      "note": "Номер, китайское название и страница подтверждены оглавлением издания. Список слов урока не подтверждён — требуется импорт."
+    },
+    {
+      "id": "bc40.l14",
+      "volume": "shang",
+      "number": 14,
+      "titleZh": "参观博物馆",
+      "page": 207,
+      "titleRu": null,
+      "vocabularyStatus": "empty",
+      "wordCount": 0,
+      "sources": [
+        "aijiaocai-715358"
+      ],
+      "note": "Номер, китайское название и страница подтверждены оглавлением издания. Список слов урока не подтверждён — требуется импорт."
+    },
+    {
+      "id": "bc40.l15",
+      "volume": "shang",
+      "number": 15,
+      "titleZh": "做客",
+      "page": 225,
+      "titleRu": null,
+      "vocabularyStatus": "empty",
+      "wordCount": 0,
+      "sources": [
+        "aijiaocai-715358"
+      ],
+      "note": "Номер, китайское название и страница подтверждены оглавлением издания. Список слов урока не подтверждён — требуется импорт."
+    },
+    {
+      "id": "bc40.l16",
+      "volume": "shang",
+      "number": 16,
+      "titleZh": "买电话卡",
+      "page": 249,
+      "titleRu": null,
+      "vocabularyStatus": "empty",
+      "wordCount": 0,
+      "sources": [
+        "aijiaocai-715358"
+      ],
+      "note": "Номер, китайское название и страница подтверждены оглавлением издания. Список слов урока не подтверждён — требуется импорт."
+    },
+    {
+      "id": "bc40.l17",
+      "volume": "shang",
+      "number": 17,
+      "titleZh": "一封邮件",
+      "page": 267,
+      "titleRu": null,
+      "vocabularyStatus": "empty",
+      "wordCount": 0,
+      "sources": [
+        "aijiaocai-715358"
+      ],
+      "note": "Номер, китайское название и страница подтверждены оглавлением издания. Список слов урока не подтверждён — требуется импорт."
+    },
+    {
+      "id": "bc40.l18",
+      "volume": "shang",
+      "number": 18,
+      "titleZh": "皮尔病了",
+      "page": 287,
+      "titleRu": null,
+      "vocabularyStatus": "empty",
+      "wordCount": 0,
+      "sources": [
+        "aijiaocai-715358"
+      ],
+      "note": "Номер, китайское название и страница подтверждены оглавлением издания. Список слов урока не подтверждён — требуется импорт."
+    },
+    {
+      "id": "bc40.l19",
+      "volume": "shang",
+      "number": 19,
+      "titleZh": "到饭店去吃饭",
+      "page": 307,
+      "titleRu": null,
+      "vocabularyStatus": "empty",
+      "wordCount": 0,
+      "sources": [
+        "aijiaocai-715358"
+      ],
+      "note": "Номер, китайское название и страница подтверждены оглавлением издания. Список слов урока не подтверждён — требуется импорт."
+    },
+    {
+      "id": "bc40.l20",
+      "volume": "shang",
+      "number": 20,
+      "titleZh": "中国的节日",
+      "page": 327,
+      "titleRu": null,
+      "vocabularyStatus": "empty",
+      "wordCount": 0,
+      "sources": [
+        "aijiaocai-715358"
+      ],
+      "note": "Номер, китайское название и страница подтверждены оглавлением издания. Список слов урока не подтверждён — требуется импорт."
+    },
+    {
+      "id": "bc40.l21",
+      "volume": "xia",
+      "number": 21,
+      "titleZh": "找对象",
+      "page": 1,
+      "titleRu": null,
+      "vocabularyStatus": "empty",
+      "wordCount": 0,
+      "sources": [
+        "aijiaocai-280711"
+      ],
+      "note": "Номер, китайское название и страница подтверждены оглавлением издания. Список слов урока не подтверждён — требуется импорт."
+    },
+    {
+      "id": "bc40.l22",
+      "volume": "xia",
+      "number": 22,
+      "titleZh": "金项链",
+      "page": 19,
+      "titleRu": null,
+      "vocabularyStatus": "empty",
+      "wordCount": 0,
+      "sources": [
+        "aijiaocai-280711"
+      ],
+      "note": "Номер, китайское название и страница подтверждены оглавлением издания. Список слов урока не подтверждён — требуется импорт."
+    },
+    {
+      "id": "bc40.l23",
+      "volume": "xia",
+      "number": 23,
+      "titleZh": "第一次出国",
+      "page": 37,
+      "titleRu": null,
+      "vocabularyStatus": "empty",
+      "wordCount": 0,
+      "sources": [
+        "aijiaocai-280711"
+      ],
+      "note": "Номер, китайское название и страница подтверждены оглавлением издания. Список слов урока не подтверждён — требуется импорт."
+    },
+    {
+      "id": "bc40.l24",
+      "volume": "xia",
+      "number": 24,
+      "titleZh": "夏令营日记",
+      "page": 53,
+      "titleRu": null,
+      "vocabularyStatus": "empty",
+      "wordCount": 0,
+      "sources": [
+        "aijiaocai-280711"
+      ],
+      "note": "Номер, китайское название и страница подтверждены оглавлением издания. Список слов урока не подтверждён — требуется импорт."
+    },
+    {
+      "id": "bc40.l25",
+      "volume": "xia",
+      "number": 25,
+      "titleZh": "上海的变化",
+      "page": 73,
+      "titleRu": null,
+      "vocabularyStatus": "empty",
+      "wordCount": 0,
+      "sources": [
+        "aijiaocai-280711"
+      ],
+      "note": "Номер, китайское название и страница подтверждены оглавлением издания. Список слов урока не подтверждён — требуется импорт."
+    },
+    {
+      "id": "bc40.l26",
+      "volume": "xia",
+      "number": 26,
+      "titleZh": "染发",
+      "page": 99,
+      "titleRu": null,
+      "vocabularyStatus": "empty",
+      "wordCount": 0,
+      "sources": [
+        "aijiaocai-280711"
+      ],
+      "note": "Номер, китайское название и страница подтверждены оглавлением издания. Список слов урока не подтверждён — требуется импорт."
+    },
+    {
+      "id": "bc40.l27",
+      "volume": "xia",
+      "number": 27,
+      "titleZh": "摔茶壶",
+      "page": 117,
+      "titleRu": null,
+      "vocabularyStatus": "empty",
+      "wordCount": 0,
+      "sources": [
+        "aijiaocai-280711"
+      ],
+      "note": "Номер, китайское название и страница подтверждены оглавлением издания. Список слов урока не подтверждён — требуется импорт."
+    },
+    {
+      "id": "bc40.l28",
+      "volume": "xia",
+      "number": 28,
+      "titleZh": "密码",
+      "page": 135,
+      "titleRu": null,
+      "vocabularyStatus": "empty",
+      "wordCount": 0,
+      "sources": [
+        "aijiaocai-280711"
+      ],
+      "note": "Номер, китайское название и страница подтверждены оглавлением издания. Список слов урока не подтверждён — требуется импорт."
+    },
+    {
+      "id": "bc40.l29",
+      "volume": "xia",
+      "number": 29,
+      "titleZh": "周末生活",
+      "page": 153,
+      "titleRu": null,
+      "vocabularyStatus": "empty",
+      "wordCount": 0,
+      "sources": [
+        "aijiaocai-280711"
+      ],
+      "note": "Номер, китайское название и страница подтверждены оглавлением издания. Список слов урока не подтверждён — требуется импорт."
+    },
+    {
+      "id": "bc40.l30",
+      "volume": "xia",
+      "number": 30,
+      "titleZh": "阳阳",
+      "page": 175,
+      "titleRu": null,
+      "vocabularyStatus": "empty",
+      "wordCount": 0,
+      "sources": [
+        "aijiaocai-280711"
+      ],
+      "note": "Номер, китайское название и страница подтверждены оглавлением издания. Список слов урока не подтверждён — требуется импорт."
+    },
+    {
+      "id": "bc40.l31",
+      "volume": "xia",
+      "number": 31,
+      "titleZh": "一场足球比赛",
+      "page": 203,
+      "titleRu": null,
+      "vocabularyStatus": "empty",
+      "wordCount": 0,
+      "sources": [
+        "aijiaocai-280711"
+      ],
+      "note": "Номер, китайское название и страница подтверждены оглавлением издания. Список слов урока не подтверждён — требуется импорт."
+    },
+    {
+      "id": "bc40.l32",
+      "volume": "xia",
+      "number": 32,
+      "titleZh": "学汉语",
+      "page": 223,
+      "titleRu": null,
+      "vocabularyStatus": "empty",
+      "wordCount": 0,
+      "sources": [
+        "aijiaocai-280711"
+      ],
+      "note": "Номер, китайское название и страница подтверждены оглавлением издания. Список слов урока не подтверждён — требуется импорт."
+    },
+    {
+      "id": "bc40.l33",
+      "volume": "xia",
+      "number": 33,
+      "titleZh": "十元钱能做什么",
+      "page": 245,
+      "titleRu": null,
+      "vocabularyStatus": "empty",
+      "wordCount": 0,
+      "sources": [
+        "aijiaocai-280711"
+      ],
+      "note": "Номер, китайское название и страница подтверждены оглавлением издания. Список слов урока не подтверждён — требуется импорт."
+    },
+    {
+      "id": "bc40.l34",
+      "volume": "xia",
+      "number": 34,
+      "titleZh": "南方和北方",
+      "page": 265,
+      "titleRu": null,
+      "vocabularyStatus": "empty",
+      "wordCount": 0,
+      "sources": [
+        "aijiaocai-280711"
+      ],
+      "note": "Номер, китайское название и страница подтверждены оглавлением издания. Список слов урока не подтверждён — требуется импорт."
+    },
+    {
+      "id": "bc40.l35",
+      "volume": "xia",
+      "number": 35,
+      "titleZh": "三张结婚照片",
+      "page": 285,
+      "titleRu": null,
+      "vocabularyStatus": "empty",
+      "wordCount": 0,
+      "sources": [
+        "aijiaocai-280711"
+      ],
+      "note": "Номер, китайское название и страница подтверждены оглавлением издания. Список слов урока не подтверждён — требуется импорт."
+    },
+    {
+      "id": "bc40.l36",
+      "volume": "xia",
+      "number": 36,
+      "titleZh": "功夫熊猫",
+      "page": 311,
+      "titleRu": null,
+      "vocabularyStatus": "empty",
+      "wordCount": 0,
+      "sources": [
+        "aijiaocai-280711"
+      ],
+      "note": "Номер, китайское название и страница подтверждены оглавлением издания. Список слов урока не подтверждён — требуется импорт."
+    },
+    {
+      "id": "bc40.l37",
+      "volume": "xia",
+      "number": 37,
+      "titleZh": "面试",
+      "page": 331,
+      "titleRu": null,
+      "vocabularyStatus": "empty",
+      "wordCount": 0,
+      "sources": [
+        "aijiaocai-280711"
+      ],
+      "note": "Номер, китайское название и страница подтверждены оглавлением издания. Список слов урока не подтверждён — требуется импорт."
+    },
+    {
+      "id": "bc40.l38",
+      "volume": "xia",
+      "number": 38,
+      "titleZh": "我的老师",
+      "page": 351,
+      "titleRu": null,
+      "vocabularyStatus": "empty",
+      "wordCount": 0,
+      "sources": [
+        "aijiaocai-280711"
+      ],
+      "note": "Номер, китайское название и страница подтверждены оглавлением издания. Список слов урока не подтверждён — требуется импорт."
+    },
+    {
+      "id": "bc40.l39",
+      "volume": "xia",
+      "number": 39,
+      "titleZh": "成功之路",
+      "page": 369,
+      "titleRu": null,
+      "vocabularyStatus": "empty",
+      "wordCount": 0,
+      "sources": [
+        "aijiaocai-280711"
+      ],
+      "note": "Номер, китайское название и страница подтверждены оглавлением издания. Список слов урока не подтверждён — требуется импорт."
+    },
+    {
+      "id": "bc40.l40",
+      "volume": "xia",
+      "number": 40,
+      "titleZh": "住的梦想",
+      "page": 389,
+      "titleRu": null,
+      "vocabularyStatus": "empty",
+      "wordCount": 0,
+      "sources": [
+        "aijiaocai-280711"
+      ],
+      "note": "Номер, китайское название и страница подтверждены оглавлением издания. Список слов урока не подтверждён — требуется импорт."
+    }
+  ],
+  "reviews": [
+    {
+      "id": "bc40.r1",
+      "volume": "shang",
+      "number": 1,
+      "titleZh": "单元复习一",
+      "page": 61,
+      "afterLesson": 5,
+      "sources": [
+        "aijiaocai-715358"
+      ]
+    },
+    {
+      "id": "bc40.r2",
+      "volume": "shang",
+      "number": 2,
+      "titleZh": "单元复习二",
+      "page": 144,
+      "afterLesson": 10,
+      "sources": [
+        "aijiaocai-715358"
+      ]
+    },
+    {
+      "id": "bc40.r3",
+      "volume": "shang",
+      "number": 3,
+      "titleZh": "单元复习三",
+      "page": 243,
+      "afterLesson": 15,
+      "sources": [
+        "aijiaocai-715358"
+      ]
+    },
+    {
+      "id": "bc40.r4",
+      "volume": "shang",
+      "number": 4,
+      "titleZh": "单元复习四",
+      "page": 348,
+      "afterLesson": 20,
+      "sources": [
+        "aijiaocai-715358"
+      ]
+    },
+    {
+      "id": "bc40.r5",
+      "volume": "xia",
+      "number": 5,
+      "titleZh": "单元复习五",
+      "page": 93,
+      "afterLesson": 25,
+      "sources": [
+        "aijiaocai-280711"
+      ]
+    },
+    {
+      "id": "bc40.r6",
+      "volume": "xia",
+      "number": 6,
+      "titleZh": "单元复习六",
+      "page": 196,
+      "afterLesson": 30,
+      "sources": [
+        "aijiaocai-280711"
+      ]
+    },
+    {
+      "id": "bc40.r7",
+      "volume": "xia",
+      "number": 7,
+      "titleZh": "单元复习七",
+      "page": 305,
+      "afterLesson": 35,
+      "sources": [
+        "aijiaocai-280711"
+      ]
+    },
+    {
+      "id": "bc40.r8",
+      "volume": "xia",
+      "number": 8,
+      "titleZh": "单元复习八",
+      "page": 410,
+      "afterLesson": 40,
+      "sources": [
+        "aijiaocai-280711"
+      ]
+    }
+  ],
+  "appendices": [
+    {
+      "volume": "shang",
+      "titleZh": "课文注音",
+      "page": 354
+    },
+    {
+      "volume": "shang",
+      "titleZh": "生词翻译",
+      "page": 422
+    },
+    {
+      "volume": "shang",
+      "titleZh": "生词检索表",
+      "page": 464
+    },
+    {
+      "volume": "xia",
+      "titleZh": "生词翻译",
+      "page": 417
+    },
+    {
+      "volume": "xia",
+      "titleZh": "生词检索表",
+      "page": 475
+    }
+  ],
+  "disclaimer": "Оглавление (номера уроков, китайские названия, страницы) подтверждено каталожными карточками издания. Словарь уроков (生词) составлен по книге пользователя и не публикуется: на публичном адресе его загружают в приложение из своего файла («Данные» → «Словарь учебника»); каждое слово хранит источник.",
+  "builtAt": "2026-09-22"
+}

@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>汉字 · учебник и HSK</title>
+<meta name="description" content="Изучение китайского по учебнику 基础汉语40课 и словарю HSK, работает без сети">
+<meta name="theme-color" content="#14161a">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icons/icon-180.png">
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<header class="top">
+  <button class="brand" id="btn-home" type="button" aria-label="На главную">漢字</button>
+  <span id="savebar" class="savebar" data-state="idle" role="status" aria-live="polite"></span>
+  <button class="icon" id="btn-search" type="button" aria-label="Поиск">⌕</button>
+  <button class="icon" id="btn-menu" type="button" aria-label="Меню" aria-haspopup="dialog">☰</button>
+</header>
+<div id="saveerr" class="saveerr" role="alert" hidden></div>
+<div id="netbar" class="netbar" hidden></div>
+
+<main id="view" class="view" tabindex="-1"></main>
+
+<div id="search-results" class="overlay" hidden>
+  <div class="overlay-head">
+    <input id="search" type="search" placeholder="汉字, пиньинь или перевод" autocomplete="off" autocapitalize="off" spellcheck="false" aria-label="Поиск по словам">
+    <button class="linkbtn" id="search-close" type="button">Закрыть</button>
+  </div>
+  <div id="search-list" class="list"></div>
+</div>
+
+<dialog id="menu" class="sheet-menu">
+  <nav class="menu" id="menu-nav">
+    <button data-view="home">Главная</button>
+    <button data-view="review">Повторение</button>
+    <button data-view="textbook">Учебник: уроки</button>
+    <button data-view="hsk">HSK: наборы слов</button>
+    <button data-view="journal">Дневник</button>
+    <button data-view="data">Данные, офлайн и копии</button>
+    <button data-view="restore">Восстановить прежний прогресс</button>
+    <button id="profile-chip" type="button">Профиль</button>
+    <button class="linkbtn" data-menu-close type="button">Закрыть</button>
+  </nav>
+</dialog>
+
+<dialog id="modal"><div id="modal-body"></div></dialog>
+<dialog id="pop" class="pop"><div id="pop-body"></div></dialog>
+<div id="toast" class="toast" hidden></div>
+
+<noscript><p style="padding:20px;color:#eee">Для работы приложения нужен JavaScript.</p></noscript>
+<script type="module" src="js/app.js"></script>
+</body>
+</html>

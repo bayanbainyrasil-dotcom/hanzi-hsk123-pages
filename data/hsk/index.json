@@ -1,0 +1,20 @@
+{
+  "schema": "hanzi-hsk123/hsk-index@1",
+  "note": "Словарь HSK лежит в репозитории (data/hsk/*.json, 11 505 записей) и берётся из локальных файлов; remote — запасной адрес прежнего сайта. После загрузки записи живут в IndexedDB офлайн.",
+  "recordFormat": {
+    "k": "стабильный ключ записи (проверено на hsk1.json 22.09.2026)",
+    "h": "汉字",
+    "p": "пиньинь с тонами",
+    "r": "русский перевод",
+    "l": "уровень HSK"
+  },
+  "packs": [
+    { "id": "hsk1",   "title": "HSK 1",   "local": "data/hsk/hsk1.json",   "remote": "https://hanzi-hsk123.netlify.app/data/hsk1.json" },
+    { "id": "hsk2",   "title": "HSK 2",   "local": "data/hsk/hsk2.json",   "remote": "https://hanzi-hsk123.netlify.app/data/hsk2.json" },
+    { "id": "hsk3",   "title": "HSK 3",   "local": "data/hsk/hsk3.json",   "remote": "https://hanzi-hsk123.netlify.app/data/hsk3.json" },
+    { "id": "hsk4",   "title": "HSK 4",   "local": "data/hsk/hsk4.json",   "remote": "https://hanzi-hsk123.netlify.app/data/hsk4.json" },
+    { "id": "hsk5",   "title": "HSK 5",   "local": "data/hsk/hsk5.json",   "remote": "https://hanzi-hsk123.netlify.app/data/hsk5.json" },
+    { "id": "hsk6",   "title": "HSK 6",   "local": "data/hsk/hsk6.json",   "remote": "https://hanzi-hsk123.netlify.app/data/hsk6.json" },
+    { "id": "hsk7-9", "title": "HSK 7–9", "local": "data/hsk/hsk7-9.json", "remote": "https://hanzi-hsk123.netlify.app/data/hsk7-9.json" }
+  ]
+}

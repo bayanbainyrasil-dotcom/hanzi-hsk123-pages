@@ -1,0 +1,231 @@
+/* Спокойный тёмный лист с «бумажной» карточкой — по мотивам первой версии приложения. */
+:root{
+  color-scheme:dark;
+  --ink:#14161a; --stone:#1e2127; --stone-2:#262a31; --edge:#2b2f37;
+  --paper:#f7f4ec; --papershade:#e6e0d2;
+  --cinnabar:#d1462f; --green:#3faa78; --amber:#e0a93c; --red:#e0553c; --blue:#6f9fe8;
+  --text:#e8e6e1; --mute:#8d929b; --faint:#646a74;
+  --tap:48px; --r:4px;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html{background:var(--ink)}
+html,body{margin:0;padding:0}
+body{background:var(--ink);color:var(--text);
+  font:16px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"PingFang SC","Noto Sans SC",sans-serif;
+  -webkit-text-size-adjust:100%;padding-bottom:env(safe-area-inset-bottom)}
+button,input,textarea,select{font:inherit;color:inherit}
+button{cursor:pointer}
+h1,h2,h3{font-weight:400;line-height:1.25;margin:0 0 .45em}
+h1{font-family:Georgia,"Times New Roman",serif;font-size:1.75rem;letter-spacing:-.01em}
+h2{font-size:1.15rem} h3{font-size:1rem;font-weight:600}
+a{color:var(--blue)}
+[hidden]{display:none!important}
+.hz-font,.hz,.zh,.char{font-family:"Songti SC","STSong","SimSun","Noto Serif SC",serif}
+
+/* шапка */
+.top{position:sticky;top:0;z-index:20;display:flex;align-items:center;gap:6px;
+  padding:max(8px,env(safe-area-inset-top)) 14px 8px;background:rgba(20,22,26,.95);backdrop-filter:blur(8px)}
+.brand{background:none;border:0;padding:8px 2px;font-family:"Songti SC","SimSun",serif;font-size:1.05rem;
+  letter-spacing:.3em;color:var(--cinnabar)}
+.savebar{flex:1;min-width:0;text-align:right;font-size:.78rem;color:var(--green);opacity:0;transition:opacity .4s;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.savebar.show{opacity:.85}
+.savebar[data-state="saving"]{color:var(--mute)}
+.icon{width:var(--tap);height:var(--tap);background:none;border:0;border-radius:50%;font-size:1.35rem;color:var(--mute)}
+.icon:active{background:var(--stone)}
+.saveerr{margin:0 14px 8px;padding:12px 14px;border:1px solid var(--red);background:#2e1512;color:#ffb3a8;border-radius:var(--r);font-size:.92rem}
+.netbar{margin:0 14px 8px;padding:8px 12px;font-size:.85rem;background:var(--stone);color:var(--amber);border-radius:var(--r)}
+
+.view{padding:10px 18px 72px;max-width:480px;margin:0 auto}
+.view.wide{max-width:900px}
+.view:focus{outline:none}
+
+/* типографика */
+.eyebrow,.label{font-size:.68rem;letter-spacing:.2em;text-transform:uppercase;color:var(--faint);margin:0 0 10px}
+.lede{color:var(--mute);font-size:.95rem;margin:0 0 22px}
+.muted{color:var(--mute)} .small{font-size:.85rem} .meta{font-size:.8rem;color:var(--faint)}
+.err{color:#ffb4ad} .ok{color:var(--green)}
+
+/* кнопки */
+.btn{min-height:var(--tap);padding:0 18px;border-radius:var(--r);border:1px solid var(--edge);background:var(--stone);
+  display:inline-flex;align-items:center;justify-content:center;gap:6px;color:var(--text)}
+.btn.primary{background:var(--paper);border-color:var(--paper);color:#14161a;font-weight:500}
+.btn.primary:active{background:var(--papershade)}
+.btn.block{display:flex;width:100%;font-size:1.05rem;min-height:56px}
+.btn.sm{min-height:40px;padding:0 12px;font-size:.9rem}
+.btn:disabled{opacity:.4;cursor:not-allowed}
+.linkbtn{background:none;border:0;color:var(--mute);min-height:var(--tap);padding:0 4px;font-size:.92rem}
+.linkbtn.center{display:block;width:100%;text-align:center}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.spread{display:flex;gap:10px;align-items:center;justify-content:space-between}
+.grow{flex:1;min-width:0}
+.list{display:flex;flex-direction:column;gap:6px}
+.stack>*+*{margin-top:10px}
+
+/* карточки-разделы (вторичные экраны) */
+.card{background:var(--stone);border:1px solid var(--edge);border-radius:var(--r);padding:16px;margin-bottom:12px}
+.card.tight{padding:10px 12px}
+details.more{margin-top:14px;border-top:1px solid var(--edge)}
+details.more>summary{list-style:none;cursor:pointer;color:var(--mute);padding:14px 0;font-size:.92rem}
+details.more>summary::-webkit-details-marker{display:none}
+details.more>summary::after{content:" ▾"}
+details.more[open]>summary::after{content:" ▴"}
+
+/* главная */
+.who{display:flex;justify-content:space-between;align-items:center;padding:6px 0 14px;margin-bottom:18px;border-bottom:1px solid var(--edge)}
+.who .name{font-size:.98rem}
+.seg{display:flex;border:1px solid var(--edge);border-radius:var(--r);overflow:hidden;margin-bottom:16px}
+.seg button{flex:1;min-height:var(--tap);background:none;border:0;color:var(--mute)}
+.seg button[aria-pressed="true"]{background:var(--paper);color:#14161a}
+.chips{display:flex;gap:5px;flex-wrap:wrap;margin-bottom:6px}
+.chips button{flex:1 1 0;min-width:42px;min-height:var(--tap);border:1px solid var(--edge);background:var(--stone);border-radius:var(--r)}
+.chips button[aria-pressed="true"]{background:var(--green);border-color:var(--green);color:#07130e;font-weight:600}
+select.pick{width:100%;min-height:var(--tap);background:var(--stone);border:1px solid var(--edge);border-radius:var(--r);padding:0 12px;margin-bottom:6px}
+.pbar{display:flex;height:8px;border-radius:4px;overflow:hidden;background:var(--stone);margin:22px 0 10px}
+.pbar i{display:block;height:100%}
+.legend{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:.85rem;color:var(--mute);margin-bottom:24px}
+.legend b{color:var(--text);font-weight:500}
+.dot{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:6px;vertical-align:0}
+.c-known{background:var(--green)} .c-learning{background:var(--amber)} .c-hard{background:var(--red)} .c-new{background:var(--papershade)}
+.hint{font-size:.85rem;color:var(--mute);margin:10px 0 0;text-align:center}
+
+/* занятие */
+.drill-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;font-size:.72rem;letter-spacing:.14em;text-transform:uppercase;color:var(--faint)}
+.drill-top .linkbtn{font-size:.72rem;letter-spacing:.14em;text-transform:uppercase}
+.sheet{position:relative;width:100%;max-width:340px;aspect-ratio:1;margin:0 auto;background:var(--paper);border-radius:2px;
+  display:flex;align-items:center;justify-content:center;box-shadow:0 18px 40px rgba(0,0,0,.45);border:0;padding:0}
+.sheet::after{content:"";position:absolute;inset:11px;border:1px solid var(--papershade);pointer-events:none}
+.sheet .gv{position:absolute;left:50%;top:11px;bottom:11px;width:1px;background:repeating-linear-gradient(to bottom,var(--papershade) 0 6px,transparent 6px 13px)}
+.sheet .gh{position:absolute;top:50%;left:11px;right:11px;height:1px;background:repeating-linear-gradient(to right,var(--papershade) 0 6px,transparent 6px 13px)}
+.sheet .char{position:relative;font-size:clamp(60px,24vw,120px);line-height:1;color:#16181c;animation:in .2s ease-out}
+.sheet .char.long{font-size:clamp(40px,14vw,76px)}
+.sheet .tag{position:absolute;left:16px;top:14px;font-size:.62rem;letter-spacing:.18em;color:#b1aa98;text-transform:uppercase}
+.sheet .sound{position:absolute;right:12px;bottom:12px;width:48px;height:48px;border:1px solid var(--papershade);background:var(--paper);
+  border-radius:50%;font-size:1.1rem;color:var(--cinnabar);display:flex;align-items:center;justify-content:center;z-index:1}
+@keyframes in{from{opacity:0;transform:scale(.95)}to{opacity:1;transform:none}}
+.ans{text-align:center;margin-top:22px;animation:up .2s ease-out}
+@keyframes up{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+.ans .py{font-family:Georgia,serif;font-style:italic;font-size:1.6rem;color:var(--cinnabar);margin-bottom:6px}
+.ans .ru{font-size:1.1rem;line-height:1.5}
+.ans .ex{font-size:.9rem;color:var(--mute);margin-top:10px}
+.grades{display:flex;gap:7px;margin-top:22px}
+.grades button{flex:1;min-height:56px;background:var(--stone);border:1px solid;border-radius:var(--r);font-size:.98rem}
+.g0{border-color:var(--red)!important;color:var(--red)} .g1{border-color:var(--amber)!important;color:var(--amber)} .g2{border-color:var(--green)!important;color:var(--green)}
+.choices{display:grid;gap:8px;margin-top:20px}
+.choices button{min-height:56px;border-radius:var(--r);border:1px solid var(--edge);background:var(--stone);padding:8px 14px;text-align:left}
+.choices button.right{border-color:var(--green);background:#10281e}
+.choices button.wrong{border-color:var(--red);background:#2c1513}
+.bigseal{width:76px;height:76px;margin:10px auto 22px;border:3px solid #ef6a4d;border-radius:3px;color:var(--cinnabar);
+  font-family:"Songti SC","SimSun",serif;font-size:40px;display:flex;align-items:center;justify-content:center}
+.center{text-align:center}
+
+/* уроки и слова */
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(148px,1fr));gap:8px}
+.lesson{background:var(--stone);border:1px solid var(--edge);border-radius:var(--r);padding:12px;text-align:left;display:flex;flex-direction:column;gap:4px;min-height:92px;color:var(--text)}
+.lesson .no{font-size:.75rem;color:var(--faint)}
+.lesson .zh{font-size:1.15rem}
+.lesson.review{border-style:dashed;opacity:.75}
+.badge{display:inline-block;font-size:.72rem;padding:2px 8px;border-radius:999px;border:1px solid var(--edge);color:var(--mute);white-space:nowrap}
+.badge.empty{color:var(--faint)}
+.badge.partial{color:var(--blue);border-color:#27405f}
+.badge.confirmed{color:var(--green);border-color:#1c4433}
+.badge.check{color:var(--amber);border-color:#5a3a1d}
+.bar{height:4px;border-radius:2px;background:var(--stone-2);overflow:hidden;display:flex;margin-top:auto}
+.bar i{display:block;height:100%}
+.bar .known{background:var(--green)} .bar .learning{background:var(--amber)} .bar .hard{background:var(--red)}
+
+.word{display:flex;gap:12px;align-items:center;padding:10px 12px;border:1px solid var(--edge);border-radius:var(--r);background:var(--stone);
+  width:100%;text-align:left;color:var(--text);min-height:56px}
+.word .hz{font-size:1.5rem;line-height:1.2;min-width:2.1em}
+.word .py{color:var(--amber);font-size:.9rem}
+.word .grow{display:block;min-width:0;overflow:hidden}
+.word .ru{display:block;font-size:.93rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.word .st{width:10px;height:10px;border-radius:2px;flex:0 0 auto}
+.marks{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px}
+.mark{min-height:48px;min-width:0;padding:0 4px;border-radius:var(--r);border:1px solid var(--edge);background:var(--stone-2);font-size:.88rem;overflow:hidden;text-overflow:ellipsis}
+.mark[aria-pressed="true"]{border-color:var(--paper);background:var(--paper);color:#14161a}
+
+/* карточка слова */
+.wcard{text-align:center}
+.wcard .hz{font-size:3.6rem;line-height:1.1;margin:4px 0 8px}
+.wcard .py{font-family:Georgia,serif;font-style:italic;font-size:1.35rem;color:var(--cinnabar)}
+.wcard .ru{font-size:1.02rem;margin:6px 0 4px}
+
+/* формы */
+textarea,input[type=text],input[type=search],input[type=number],select{width:100%;background:var(--stone-2);border:1px solid var(--edge);border-radius:var(--r);padding:10px 12px;min-height:var(--tap);color:var(--text)}
+textarea{min-height:96px;resize:vertical}
+textarea:focus,input:focus{outline:none;border-color:var(--mute)}
+label.field{display:block;margin-bottom:10px}
+label.field>span{display:block;font-size:.82rem;color:var(--mute);margin-bottom:4px}
+.note-status{font-size:.8rem;color:var(--faint)}
+.note-status[data-state="saved"]{color:var(--green)} .note-status[data-state="error"]{color:var(--red)}
+
+/* поиск, меню, диалоги */
+.overlay{position:fixed;inset:0;z-index:30;background:var(--ink);overflow:auto;padding:max(10px,env(safe-area-inset-top)) 14px 40px}
+.overlay-head{display:flex;gap:8px;align-items:center;padding:4px 0 12px;position:sticky;top:0;background:var(--ink)}
+.overlay .list{max-width:480px;margin:0 auto}
+dialog{border:1px solid var(--edge);border-radius:6px;background:var(--stone);color:var(--text);max-width:440px;width:calc(100vw - 28px);padding:18px;max-height:88vh;overflow-x:hidden;overscroll-behavior:contain}
+html:has(#modal[open]),html:has(#pop[open]){overflow:hidden}
+#modal::backdrop,#pop::backdrop{cursor:pointer}
+dialog::backdrop{background:rgba(10,11,13,.8)}
+.sheet-menu{margin:auto 0 0 auto;height:100dvh;max-height:100dvh;width:min(300px,86vw);border-radius:0;border-width:0 0 0 1px;padding:max(16px,env(safe-area-inset-top)) 10px 20px}
+.menu{display:flex;flex-direction:column}
+.menu button{min-height:52px;text-align:left;background:none;border:0;border-bottom:1px solid var(--edge);padding:0 10px;font-size:1rem;color:var(--text)}
+.menu button.linkbtn{border:0;color:var(--mute);margin-top:6px}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(18px + env(safe-area-inset-bottom));background:var(--stone-2);border:1px solid var(--edge);border-radius:var(--r);padding:10px 16px;z-index:60;max-width:92vw;font-size:.92rem}
+table{width:100%;border-collapse:collapse;font-size:.9rem}
+td,th{padding:7px 4px;border-bottom:1px solid var(--edge);text-align:left;vertical-align:top}
+td:first-child{hyphens:auto;min-width:6.5em;color:var(--mute)}
+td+td{overflow-wrap:anywhere}
+progress{width:100%;height:8px}
+@media (min-width:720px){ .view{padding:18px 16px 80px} }
+@media (prefers-reduced-motion:reduce){ *{animation:none!important;transition:none!important} }
+
+/* восстановление прежнего прогресса */
+.rc-src{display:flex;flex-direction:column;gap:4px;cursor:pointer}
+.rc-src input[type=checkbox]{width:20px;height:20px;vertical-align:-4px;margin-right:6px}
+
+/* примеры употребления */
+.exs{margin-top:14px;text-align:left}
+.exhead{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:4px}
+.exhead .label{margin:0}
+.ex{padding:10px 0;border-top:1px solid var(--edge)}
+.exzh{margin:0;font-family:"Songti SC","STSong","SimSun","Noto Serif SC",serif;font-size:1.35rem;line-height:1.7}
+.tok{background:none;border:0;padding:0 1px;margin:0;font:inherit;color:inherit;cursor:pointer;border-radius:3px}
+.tok:active,.tok:focus-visible{background:var(--stone-2)}
+.tok.tgt{color:var(--cinnabar)}
+.tok.unk{text-decoration:underline dotted var(--faint);text-underline-offset:5px}
+.ex p{overflow-wrap:anywhere}
+.expy{margin:0;font-size:.92rem;line-height:1.45;color:var(--mute)}
+.exru{margin:3px 0 0;font-size:.98rem;line-height:1.45;color:var(--text)}
+.exbar{display:flex;gap:14px;margin-top:4px}
+.exbar .linkbtn{padding:6px 0;min-height:32px;font-size:.85rem}
+.sheet .exzh{font-size:1.6rem;color:var(--ink);text-align:center;padding:0 12px;position:relative}
+/* карточка слова из предложения */
+dialog.pop{max-width:420px;width:calc(100% - 32px);border:1px solid var(--edge);background:var(--stone);color:var(--text);border-radius:8px;padding:16px}
+dialog.pop::backdrop{background:rgba(0,0,0,.5)}
+.pop .hz{font-size:2.2rem;line-height:1.2}
+.pop .say-line{display:flex;gap:10px;align-items:baseline;flex-wrap:wrap}
+.pop .ctx{margin:8px 0 4px}
+.pop ul{margin:4px 0;padding-left:18px}
+.pop .row{margin-top:12px}
+
+/* оглавление учебника: простой вертикальный список */
+.toc{list-style:none;margin:0;padding:0;border-top:1px solid var(--edge)}
+.toc li{margin:0}
+.toc-row{display:flex;align-items:center;gap:12px;width:100%;min-height:var(--tap);padding:10px 2px;background:none;border:0;border-bottom:1px solid var(--edge);color:var(--text);text-align:left}
+.toc-row .no{width:26px;text-align:right;color:var(--faint);font-size:.85rem;flex:none}
+.toc-row .grow{min-width:0;display:flex;flex-direction:column;gap:2px}
+.toc-row .zh{font-size:1.05rem}
+.toc-row .sub{font-size:.8rem;color:var(--faint)}
+.toc-row .sub.has{color:var(--green)}
+.toc-row .pg{flex:none;color:var(--faint);font-size:.8rem;min-width:32px;text-align:right}
+.toc-row.quiet{padding-left:40px;color:var(--mute)}
+.toc-row.quiet .zh{font-size:.95rem}
+.toc-row .bar{margin-top:4px}
+
+/* динамик: заметный, одинаковый в занятии и карточке */
+.say-row{display:flex;align-items:center;justify-content:center;gap:10px}
+.spk{display:inline-flex;align-items:center;justify-content:center;min-width:44px;height:44px;padding:0 10px;border:1px solid var(--edge);border-radius:22px;background:var(--stone-2);color:var(--cinnabar);font:inherit;font-size:.8rem}
+.spk.slow{color:var(--mute)}
+.sound svg{display:block;margin:auto}
