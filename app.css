@@ -255,3 +255,7 @@ dialog.pop::backdrop{background:rgba(0,0,0,.5)}
 .summary .word{display:flex;gap:12px;align-items:center;width:100%;text-align:left}
 .summary .word .hz{font-size:1.6rem}
 .summary .ok{color:var(--green)}
+/* сохранность: строка статуса на главной и предупреждения */
+#cloudline{min-height:32px;font-size:.78rem;color:var(--faint);margin-top:6px}
+#cloudline[data-state="error"]{color:var(--red)}
+.warn{color:var(--amber)}

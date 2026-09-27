@@ -1,7 +1,7 @@
 // IndexedDB: единственное надёжное хранилище учебного опыта.
 // Всё пишется сразу и локально, работает без сети.
 export const DB_NAME = 'hanzi_hsk123';
-export const DB_VERSION = 2;          // 2: примеры употребления (examples)
+export const DB_VERSION = 3;          // 2: примеры употребления (examples); 3: очередь синхронизации (outbox) и её состояние (sync)
 
 const STORES = {
   meta:        { keyPath: 'key' },
@@ -17,8 +17,47 @@ const STORES = {
   sessions:    { keyPath: 'id', indexes: { byProfileTs: ['profileId', 'startedAt'] } },
   backups:     { keyPath: 'id' },
   assets:      { keyPath: 'id' },     // скачанные наборы для офлайна (учёт, не сами файлы)
-  examples:    { keyPath: 'id', indexes: { byTid: 'tid', byPack: 'pack' } }   // примеры употребления: скачиваются с набором
+  examples:    { keyPath: 'id', indexes: { byTid: 'tid', byPack: 'pack' } },  // примеры употребления: скачиваются с набором
+  outbox:      { keyPath: 'k' },      // что изменено на устройстве и ещё не подтверждено облаком (пишется в той же транзакции)
+  sync:        { keyPath: 'id' }      // подключение к облаку и последнее подтверждённое состояние; в копии и выгрузки не входит
 };
+
+/* ---------- очередь синхронизации ----------
+   Любая запись учебных данных (профиль, отметки, попытки, заметки, дневник, занятия, настройки обучения,
+   свои слова, словарь учебника) в той же транзакции кладёт в outbox пометку «изменено». Если транзакция
+   не прошла — нет ни записи, ни пометки. Облако снимает пометку только после подтверждения сервером. */
+const SYNCED = new Set(['profiles', 'progress', 'attempts', 'notes', 'journal', 'sessions', 'entries', 'links', 'meta']);
+export const SYNC_META = /^(home|newPerDay|drill|journalDraft):|^bookWordsFile$/;   // настройки обучения по профилю, незавершённое занятие
+const userRow = (v) => /^(user|import)/.test(String(v?.source || ''));
+const keyOf = (store, v) => v?.[STORES[store].keyPath];
+function tracked(store, key, value) {
+  if (store === 'meta') return SYNC_META.test(String(key));
+  if (store === 'entries' || store === 'links') return value === undefined ? true : userRow(value);
+  return true;
+}
+let outSeq = 0;
+const outMark = (store, key, del, prev) => ({ k: store + '|' + key, store, key, del: !!del, v: `${Date.now().toString(36)}.${(++outSeq).toString(36)}.${Math.random().toString(36).slice(2, 7)}`, at: Date.now(), ...(prev !== undefined ? { prev } : {}) });
+/** Обёртка транзакции: put/delete синхронизируемых хранилищ сами пишут пометку в outbox той же транзакцией. */
+function trackTx(tx) {
+  const box = () => tx.objectStore('outbox');
+  return new Proxy(tx, { get(t, prop) {
+    if (prop !== 'objectStore') { const v = t[prop]; return typeof v === 'function' ? v.bind(t) : v; }
+    return (name) => {
+      const os = t.objectStore(name);
+      if (!SYNCED.has(name)) return os;
+      return new Proxy(os, { get(o, p) {
+        if (p === 'put') return (value, key) => { const r = o.put(value, key); const k = key ?? keyOf(name, value); if (tracked(name, k, value)) box().put(outMark(name, k, false)); return r; };
+        if (p === 'delete') return (key) => {
+          // прежнее значение нужно облаку, чтобы знать, в каком файле поставить отметку «удалено»
+          const g = o.get(key); g.onsuccess = () => { const prev = g.result; if (prev !== undefined && tracked(name, key, name === 'meta' ? undefined : prev)) box().put(outMark(name, key, true, prev)); };
+          return o.delete(key);
+        };
+        if (p === 'clear') return () => { throw new Error('массовая очистка учебных данных запрещена'); };
+        const v = o[p]; return typeof v === 'function' ? v.bind(o) : v;
+      } });
+    };
+  } });
+}
 
 let dbPromise = null;
 
@@ -73,8 +112,11 @@ export function storageErrorText(err) {
   return 'запись не сохранена: ' + (msg || name || 'неизвестная ошибка');
 }
 
-function run(store, mode, fn) {
+function run(store, mode, fn, opts = {}) {
   const writing = mode === 'readwrite';
+  let names = Array.isArray(store) ? store : [store];
+  const track = writing && !opts.noOutbox && names.some(n => SYNCED.has(n));
+  if (track && !names.includes('outbox')) names = [...names, 'outbox'];
   if (writing) { pendingWrites++; emitSave('saving'); }
   let settled = false;
   const done = (ok, err) => {
@@ -86,14 +128,14 @@ function run(store, mode, fn) {
   };
   return openDB().then(db => new Promise((resolve, reject) => {
     let tx;
-    try { tx = db.transaction(Array.isArray(store) ? store : [store], mode, writing ? { durability: 'strict' } : undefined); }
+    try { tx = db.transaction(names, mode, writing ? { durability: 'strict' } : undefined); }
     catch (e) { done(false, e); reject(e); return; }
     let out, fnErr = null;
     tx.oncomplete = () => { done(true); resolve(out); };
     tx.onabort = () => { const e = fnErr || tx.error || new Error('Транзакция прервана'); done(false, e); reject(e); };
     const fail = (e) => { fnErr = e; try { tx.abort(); } catch { done(false, e); reject(e); } };
     let r;
-    try { r = fn(tx); } catch (e) { fail(e); return; }            // синхронная ошибка тоже отменяет транзакцию
+    try { r = fn(track ? trackTx(tx) : tx); } catch (e) { fail(e); return; }            // синхронная ошибка тоже отменяет транзакцию
     Promise.resolve(r).then(v => { out = v; }, fail);
   }), (e) => { done(false, e); throw e; });
 }

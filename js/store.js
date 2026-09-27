@@ -215,7 +215,14 @@ export async function getNote(targetType, targetId) {
 export async function saveNote(targetType, targetId, text) {
   const existing = await getNote(targetType, targetId);
   const clean = String(text ?? '');
-  if (existing && !clean.trim()) { await db.del('notes', existing.id); emit('notes'); return null; }
+  if (existing && !clean.trim()) {
+    // стёртая заметка не пропадает: в той же транзакции кладётся в корзину («Данные» → «Корзина»), облако получает отметку «удалено»
+    await db.tx(['notes', 'backups'], 'readwrite', t => {
+      t.objectStore('backups').put({ id: uid('bk'), kind: 'trash', createdAt: new Date().toISOString(), what: 'notes', value: existing, note: 'заметка стёрта' });
+      t.objectStore('notes').delete(existing.id);
+    });
+    emit('notes'); return null;
+  }
   const note = existing
     ? { ...existing, text: clean, updatedAt: new Date().toISOString() }
     : { id: uid('nt'), profileId: currentProfileId, targetType, targetId, text: clean, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };

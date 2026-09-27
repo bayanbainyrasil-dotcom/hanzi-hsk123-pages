@@ -5,6 +5,8 @@ import * as migrate from './migrate.js';
 import * as recover from './recover.js';
 import * as speech from './speech.js';
 import * as P from './practice.js';
+import * as sync from './sync.js';
+import * as backup from './safety.js';
 import { uid } from './model.js';
 
 /* ---------- мелкие помощники ---------- */
@@ -12,7 +14,7 @@ const $ = (sel, root = document) => root.querySelector(sel);
 const view = $('#view');
 let swError = null;
 // номер запущенной версии: при публикации сборка подставляет сюда коммит (tools/build-site.mjs)
-const BUILD = 'c9020c6';
+const BUILD = '531a5b2';
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const html = (strings, ...vals) => strings.reduce((a, s, i) => a + s + (i < vals.length ? (Array.isArray(vals[i]) ? vals[i].join('') : vals[i] ?? '') : ''), '');
 
@@ -53,8 +55,49 @@ async function boot() {
   speech.setPreferred(await db.metaGet('voicePref', null));
   await render();
   db.requestPersistence().then(v => { persisted = v; });
+  wireCloud();
+  backup.dailySnapshot().catch(() => {});
   await maybeOfferMigration();
   syncAllExamples();
+}
+
+/* ---------- облако: статус на главной и в «Данных» ---------- */
+let cloudState = sync.getStatus();
+const shortTime = (iso) => new Date(iso).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+function cloudLineText(s = cloudState) {
+  if (s.cloud === 'off') return 'Сохранено на устройстве';
+  if (s.cloud === 'syncing') return 'Сохранено на устройстве · отправка в облако…';
+  if (s.cloud === 'error') return `Сохранено на устройстве · ожидает отправки: ${s.pending} · ${s.code === 'offline' ? 'нет сети' : 'облако: ошибка'}`;
+  if (s.pending) return `Ожидает отправки: ${s.pending}` + (s.at ? ` · в облаке: ${shortTime(s.at)}` : '');
+  return s.at ? `Сохранено в облаке: ${shortTime(s.at)}` : 'Сохранено на устройстве';
+}
+async function paintCloudLine() {
+  const el = document.getElementById('cloudline'); if (!el) return;
+  const r = await backup.reminder().catch(() => null);
+  el.textContent = cloudLineText() + (r ? (r.never ? ' · резервной копии файлом нет' : ` · копия файлом: ${r.days} дн. назад`) : '');
+  el.dataset.state = cloudState.cloud;
+}
+function cloudStatusHTML(s = cloudState) {
+  return html`<table class="kv"><tbody>
+    <tr><td>На устройстве</td><td>${lastSaveError ? html`<span class="err">не сохранено: ${esc(lastSaveError)}</span>` : 'сохранено'}</td></tr>
+    <tr><td>Ожидает отправки</td><td>${s.cloud === 'off' ? '—' : s.pending}</td></tr>
+    <tr><td>Облако</td><td>${s.cloud === 'off' ? 'не подключено' : s.cloud === 'error' ? html`<span class="err">${esc(s.text)}</span>` : s.cloud === 'syncing' ? 'синхронизация…' : esc(s.text || 'подключено')}</td></tr>
+    <tr><td>Сохранено в облаке</td><td>${s.at ? new Date(s.at).toLocaleString('ru-RU') : '—'}</td></tr>
+  </tbody></table>`;
+}
+function wireCloud() {
+  sync.onStatus((s) => {
+    cloudState = s; paintCloudLine();
+    const box = document.getElementById('cloud-status'); if (box) box.innerHTML = cloudStatusHTML();
+  });
+  sync.start({
+    onBookWords: async (data) => { try { await cat.importBookWords(data, { name: 'облако' }); } catch {} },
+    onPulled: async () => {
+      const mine = (await store.listProfiles()).filter(p => p.owner).map(p => p.id);
+      if (await store.focusFilled(mine)) toast('Открыт профиль из облака', 3000);
+      if (!state.drill && state.view !== 'data') render();
+    }
+  });
 }
 async function syncAllExamples() {
   if (!navigator.onLine) return;
@@ -312,7 +355,9 @@ async function renderHome() {
     ${missing.length ? html`<p class="hint">${missing.map(LEVEL_LABEL).join(', ')} скачается при старте — один раз, дальше без сети.</p>` : ''}
     <button class="linkbtn center" data-act="start-quiz" ${canStart && ids.length >= 4 ? '' : 'disabled'}>Самопроверка: выбрать перевод</button>
     <button class="linkbtn center" data-act="mat-words" ${ids.length ? '' : 'disabled'}>Все слова материала</button>
-    ${offerRecover ? html`<button class="linkbtn center" data-act="goto" data-id="restore">Найден прежний прогресс — восстановить</button>` : ''}`;
+    ${offerRecover ? html`<button class="linkbtn center" data-act="goto" data-id="restore">Найден прежний прогресс — восстановить</button>` : ''}
+    <button class="linkbtn center small muted" id="cloudline" data-act="goto-safety"></button>`;
+  paintCloudLine();
   const sel = $('#mat-lesson');
   if (sel) sel.addEventListener('change', async () => { m.lessonId = sel.value; await setMaterial(m); render(); });
 }
@@ -1033,15 +1078,7 @@ async function renderData() {
       </div>
     </div>
 
-    <div class="card">
-      <h3>Резервная копия учебного опыта</h3>
-      <p class="muted small">Данные браузера не переживут очистку сайта или удаление приложения. Файл-копия — единственная надёжная страховка.
-      Последний экспорт: <b>${lastExport ? new Date(lastExport).toLocaleString('ru-RU') : 'никогда'}</b>.</p>
-      <div class="row">
-        <button class="btn primary" data-act="export">Скачать копию</button>
-        <button class="btn" data-act="import-backup">Загрузить копию</button>
-      </div>
-    </div>
+    ${await safetyCard()}
 
     <div class="card" id="book-box">
       <h3>Словарь учебника</h3>
@@ -1085,6 +1122,200 @@ async function renderData() {
     </div>`;
 }
 
+/* ---------- «Данные» → сохранность: облако, резервная копия файлом, версии, конфликты, корзина ---------- */
+const TOKEN_URL = (owner) => `https://github.com/settings/personal-access-tokens/new?name=${encodeURIComponent('hanzi-hsk123 облако')}&description=${encodeURIComponent('Сохранение учебного прогресса hanzi-hsk123 в приватный репозиторий')}${owner ? '&target_name=' + encodeURIComponent(owner) : ''}&expires_in=366&contents=write`;
+async function safetyCard() {
+  const conn = await sync.getConn();
+  const lastFile = await backup.lastSavedAt();
+  const rem = await backup.reminder();
+  const conflicts = conn ? await sync.listConflicts() : [];
+  const trash = await backup.listTrash();
+  const snaps = (await backup.listSnapshots()).filter(x => x.kind !== 'trash');
+  return html`<div class="card" id="safety-box">
+    <h3>Сохранность</h3>
+    <div id="cloud-status">${cloudStatusHTML()}</div>
+    ${conn ? html`
+      <p class="muted small">Облако: приватный репозиторий <b>${esc(conn.repo)}</b> (аккаунт GitHub ${esc(conn.login)}). Отправка идёт, пока приложение открыто:
+      после ответов, при открытии и при появлении сети. Когда iPhone закрыл приложение, отправки нет — она продолжится при следующем открытии.</p>
+      <div class="row"><button class="btn sm primary" data-act="cloud-sync">Синхронизировать сейчас</button>
+        <button class="btn sm" data-act="cloud-versions">Версии в облаке</button>
+        <button class="btn sm" data-act="cloud-disconnect">Отключить на этом устройстве</button></div>`
+    : html`
+      <details class="more" id="cloud-connect"><summary>Подключить облако (приватный GitHub)</summary>
+        <p class="muted small">Данные уходят только в <b>ваш приватный</b> репозиторий GitHub. Вход — ключ доступа только к этому репозиторию.
+        Ключ хранится лишь на этом устройстве, в резервные копии и облако не попадает. Не присылайте ключ никому.</p>
+        <ol class="small">
+          <li>Приватный репозиторий: <code>hanzi-hsk123-data</code> (пустой).</li>
+          <li><a href="${TOKEN_URL('')}" target="_blank" rel="noopener">Создать ключ на GitHub</a> — название, срок (366 дней) и право «Contents: Read and write» уже заполнены.
+            В «Repository access» выберите «Only select repositories» → <code>hanzi-hsk123-data</code>. Нажмите «Generate token» и скопируйте ключ.</li>
+          <li>Вставьте ключ сюда и нажмите «Проверить» — сначала будет показано, что и куда отправится.</li>
+        </ol>
+        <label class="field"><span>Репозиторий</span><input id="cloud-repo" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="логин/hanzi-hsk123-data" value="hanzi-hsk123-data"></label>
+        <label class="field"><span>Ключ доступа GitHub</span><input id="cloud-token" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="github_pat_…"></label>
+        <button class="btn sm primary" data-act="cloud-inspect">Проверить</button>
+      </details>`}
+    ${conflicts.length ? html`<details class="more"><summary>Конфликты синхронизации: ${conflicts.length}</summary>
+      <p class="muted small">Запись изменили на двух устройствах. Оставлена одна версия, вторая сохранена — её можно взять.</p>
+      <div class="list">${conflicts.slice(0, 60).map(c => html`<div class="card tight spread small"><span>${esc(conflictLabel(c))} · оставлена: ${esc(c.kept)}</span>
+        <button class="btn sm" data-act="conflict-take" data-id="${esc(c.id)}">Взять другую</button></div>`)}</div></details>` : ''}
+
+    <h4 style="margin-top:14px">Резервная копия файлом</h4>
+    <p class="muted small">Независимо от облака: все профили, отметки, попытки, заметки, дневник, занятия, настройки и словарь учебника в одном файле.
+    На iPhone — «Сохранить в Файлы» (можно в iCloud Drive). Сайт не пишет в iCloud сам.
+    Последняя копия: <b>${lastFile ? new Date(lastFile).toLocaleString('ru-RU') : 'не сохранялась'}</b>${rem ? html` <span class="warn">— ${rem.never ? 'стоит сохранить' : `прошло ${rem.days} дн.`}</span>` : ''}.</p>
+    <div class="row">
+      <button class="btn sm primary" data-act="full-backup">Сохранить резервную копию</button>
+      <label class="btn sm">Восстановить из копии<input type="file" accept=".json,application/json" data-mode="full-backup" hidden></label>
+    </div>
+    <details class="more"><summary>Корзина: ${trash.length}</summary>
+      ${trash.length ? html`<div class="list">${trash.slice(0, 50).map(b => html`<div class="card tight spread small"><span>${esc(b.what === 'notes' ? 'Заметка: ' + String(b.value?.text || '').slice(0, 50) : b.what)} · ${new Date(b.createdAt).toLocaleString('ru-RU')}</span>
+        <button class="btn sm" data-act="untrash" data-id="${esc(b.id)}">Вернуть</button></div>`)}</div>` : html`<p class="muted small">Пусто. Стёртые заметки хранятся здесь 60 дней.</p>`}
+    </details>
+    <details class="more"><summary>Снимки на устройстве: ${snaps.length}</summary>
+      <p class="muted small">Ежедневный снимок (7 последних) и копии перед переносом и восстановлением (по 10). Нужны для отката, если что-то пошло не так.</p>
+      <div class="list">${snaps.slice(0, 30).map(x => html`<div class="small">${new Date(x.createdAt).toLocaleString('ru-RU')} · ${esc(SNAP_RU[x.kind] || x.kind)}${x.counts ? ` · отметок ${x.counts.progress ?? '—'}, попыток ${x.counts.attempts ?? '—'}` : ''}</div>`)}</div>
+    </details>
+    <details class="more"><summary>Копия одного профиля</summary>
+      <p class="muted small">Прежний формат (текущий профиль). Последний экспорт: ${(await store.lastExportAt()) ? new Date(await store.lastExportAt()).toLocaleString('ru-RU') : 'никогда'}.</p>
+      <div class="row"><button class="btn sm" data-act="export">Скачать копию профиля</button><button class="btn sm" data-act="import-backup">Загрузить копию профиля</button></div>
+    </details>
+  </div>`;
+}
+const SNAP_RU = { daily: 'ежедневный', 'pre-restore': 'перед восстановлением прогресса', 'pre-transfer': 'перед переносом', 'pre-backup-restore': 'перед восстановлением из файла', 'restore-differences': 'версии из файла, не заменившие текущие' };
+function conflictLabel(c) {
+  const v = c.local || c.remote || {};
+  if (c.store === 'progress') return `слово ${String(c.rk)} — здесь: ${MARK_SHORT[c.local?.status] || c.local?.status || '—'}, в облаке: ${MARK_SHORT[c.remote?.status] || c.remote?.status || '—'}`;
+  if (c.store === 'notes') return 'заметка: ' + String(v.text || '').slice(0, 40);
+  return c.store + ' ' + c.rk;
+}
+
+let pendingFile = null;              // готовый файл копии: сохраняется отдельным нажатием (iPhone требует свежее нажатие для «Поделиться»)
+async function onSafetyAct(act, b) {
+  if (act === 'goto-safety') {
+    go('data');
+    for (let i = 0; i < 40 && !document.getElementById('safety-box'); i++) await new Promise(r => setTimeout(r, 50));
+    document.getElementById('safety-box')?.scrollIntoView({ block: 'start' }); return true;
+  }
+  if (act === 'cloud-sync') { b.disabled = true; const r = await sync.syncNow('manual'); b.disabled = false; toast(r.ok ? 'Сохранено в облаке' : 'Облако: ' + (r.text || 'не подключено'), 4000); render(); return true; }
+  if (act === 'cloud-inspect') {
+    const token = $('#cloud-token')?.value || '', repo = $('#cloud-repo')?.value || '';
+    b.disabled = true; b.textContent = 'Проверяю…';
+    try {
+      const info = await sync.inspect(token, repo);
+      const local = await sync.localSummary();
+      if (info.foreign) throw new Error(`в ${info.repo} уже есть посторонние файлы — нужен пустой приватный репозиторий`);
+      state.cloudToken = token; state.cloudRepo = info.repo;
+      const cur = store.profileId();
+      modal(html`<h3>Подключить облако</h3>
+        <p class="small">Аккаунт GitHub: <b>${esc(info.login)}</b>. Репозиторий: <b>${esc(info.repo)}</b> (приватный${info.empty ? ', пустой' : ''}).</p>
+        ${info.profiles.length ? html`<p class="small">В облаке уже есть профили — они будут <b>загружены</b> на это устройство (облачные данные не заменяются):</p>
+          <ul class="small">${info.profiles.map(p => html`<li>${esc(p.name)} — файлов отметок ${p.progressFiles}, дней с ответами ${p.attemptDays}</li>`)}</ul>` : ''}
+        <p class="small">Отправить в облако профили этого устройства (отметки, попытки, навыки, заметки, дневник, занятия, настройки и незавершённое занятие; словарь учебника — в закрытую папку):</p>
+        <div class="list">${local.map(p => html`<label class="spread small"><span>${esc(p.name)} — отметок ${p.progress}, попыток ${p.attempts}, заметок ${p.notes}${p.owner && p.owner !== info.login + '/' + info.repo ? ' · <b>привязан к другому аккаунту — не отправляется</b>' : ''}</span>
+          <input type="checkbox" data-upload="${esc(p.id)}" ${(p.progress + p.attempts + p.notes + p.journal) && (!p.owner || p.owner === info.login + '/' + info.repo) ? 'checked' : ''} ${p.owner && p.owner !== info.login + '/' + info.repo ? 'disabled' : ''} style="width:22px;height:22px"></label>`)}</div>
+        <p class="muted small">Пустые профили по умолчанию не отправляются. Тестовые профили не отправляются никогда. Отключить можно в любой момент — данные останутся и здесь, и в облаке.</p>
+        <div class="row"><button class="btn primary" data-act="cloud-connect">Подключить</button><button class="btn" data-close>Отмена</button></div>`);
+    } catch (e) { toast('Облако: ' + (e.message || e), 7000); }
+    finally { b.disabled = false; b.textContent = 'Проверить'; }
+    return true;
+  }
+  if (act === 'cloud-connect') {
+    const ids = [...document.querySelectorAll('#modal [data-upload]')].filter(x => x.checked).map(x => x.dataset.upload);
+    b.disabled = true; b.textContent = 'Подключаю…';
+    try {
+      const r = await sync.connect(state.cloudToken, state.cloudRepo, { uploadIds: ids });
+      state.cloudToken = null; closeModal();
+      toast(r.ok ? 'Облако подключено · сохранено в облаке' : 'Подключено, но синхронизация не прошла: ' + (r.text || ''), 6000);
+    } catch (e) { toast('Облако: ' + (e.message || e), 7000); b.disabled = false; b.textContent = 'Подключить'; return true; }
+    render(); return true;
+  }
+  if (act === 'cloud-disconnect') {
+    modal(html`<h3>Отключить облако на этом устройстве?</h3><p class="small">Ключ будет удалён с устройства. Данные останутся и здесь, и в облаке. Неотправленные изменения (${cloudState.pending}) останутся в очереди и уйдут, если подключить этот же аккаунт снова.</p>
+      <div class="row"><button class="btn primary" data-act="cloud-disconnect-yes">Отключить</button><button class="btn" data-close>Отмена</button></div>`);
+    return true;
+  }
+  if (act === 'cloud-disconnect-yes') { await sync.disconnect(); closeModal(); render(); return true; }
+  if (act === 'cloud-versions') {
+    b.disabled = true;
+    try {
+      const list = await sync.versions(store.profileId());
+      modal(html`<h3>Версии профиля в облаке</h3>
+        <p class="muted small">Каждая отправка — версия. Выбранная версия восстанавливается <b>новым профилем</b>: текущие данные не меняются.</p>
+        ${list.length ? html`<div class="list">${list.map(v => html`<div class="spread small"><span>${new Date(v.date).toLocaleString('ru-RU')}</span><button class="btn sm" data-act="cloud-version-open" data-id="${esc(v.sha)}">Открыть</button></div>`)}</div>` : html`<p class="small">Для этого профиля в облаке версий нет.</p>`}
+        <button class="btn" data-close>Закрыть</button>`);
+    } catch (e) { toast('Облако: ' + (e.message || e), 6000); }
+    b.disabled = false; return true;
+  }
+  if (act === 'cloud-version-open') {
+    const snap = await sync.snapshotAt(b.dataset.id, store.profileId()).catch(e => { toast('Облако: ' + e.message, 6000); return null; });
+    if (!snap) return true;
+    state.cloudSnap = snap;
+    const known = snap.progress.filter(p => p.status === 'known').length;
+    modal(html`<h3>Версия от ${new Date(snap.date).toLocaleString('ru-RU')}</h3>
+      <p class="small">Профиль «${esc(snap.profile?.name || '—')}»: отметок ${snap.progress.length} (знаю ${known}), попыток ${snap.attempts.length}, заметок ${snap.notes.length}, записей дневника ${snap.journal.length}, занятий ${snap.sessions.length}.</p>
+      <div class="row"><button class="btn primary" data-act="cloud-version-restore">Восстановить как новый профиль</button><button class="btn" data-close>Закрыть</button></div>`);
+    return true;
+  }
+  if (act === 'cloud-version-restore') {
+    const r = await sync.restoreAsNewProfile(state.cloudSnap); state.cloudSnap = null;
+    await store.setProfile(r.id); closeModal();
+    toast(`Восстановлено в новый профиль «${r.name}»: отметок ${r.counts.progress}`, 6000); render(); return true;
+  }
+  if (act === 'conflict-take') { const ok = await sync.takeOther(b.dataset.id); toast(ok ? 'Взята другая версия' : 'Эту версию взять нельзя', 3000); render(); return true; }
+  if (act === 'untrash') { const r = await backup.untrash(b.dataset.id); toast(r === true ? 'Возвращено' : r === 'occupied' ? 'На этом месте уже есть новая запись — не заменяю' : 'Не найдено', 4000); render(); return true; }
+  if (act === 'full-backup') {
+    b.disabled = true;
+    const obj = await backup.makeFullBackup({ appVersion: BUILD });
+    const text = JSON.stringify(obj);
+    pendingFile = { name: `hanzi-hsk123-резервная-копия-${new Date().toISOString().slice(0, 16).replace(/[:T]/g, '-')}.json`, text, at: obj.exportedAt };
+    b.disabled = false;
+    const c = obj.counts;
+    modal(html`<h3>Резервная копия готова</h3>
+      <p class="small">Профилей ${c.profiles}, отметок ${c.progress}, попыток ${c.attempts}, заметок ${c.notes}, дневник ${c.journal}, занятий ${c.sessions}, настроек ${c.settings}${obj.data.bookWords ? ', словарь учебника' : ''}. Размер ${(text.length / 1024).toFixed(0)} КБ. Контрольная сумма ${obj.checksum}.</p>
+      <p class="muted small">На iPhone: «Сохранить в Файлы» → iCloud Drive или «На iPhone».</p>
+      <div class="row"><button class="btn primary" data-act="full-backup-save">Сохранить файл</button><button class="btn" data-close>Отмена</button></div>`);
+    return true;
+  }
+  if (act === 'full-backup-save') {
+    if (!pendingFile) return true;
+    const how = await saveJSONFile(pendingFile.name, pendingFile.text, { share: true });
+    if (how === 'cancelled') { toast('Файл не сохранён', 3000); return true; }
+    await backup.markSaved(pendingFile.at); pendingFile = null; closeModal();
+    toast(how === 'shared' ? 'Файл передан в «Поделиться» — проверьте, что он появился в «Файлах»' : 'Файл сохранён в загрузки', 5000);
+    render(); return true;
+  }
+  if (act === 'full-restore-merge' || act === 'full-restore-new') {
+    const obj = state.restoreFile; if (!obj) return true;
+    b.disabled = true;
+    try {
+      const r = await backup.restoreFull(obj, { mode: act === 'full-restore-new' ? 'new' : 'merge' });
+      if (obj.data.bookWords && r.stats.bookWords) { try { await cat.importBookWords(obj.data.bookWords, { name: 'резервная копия' }); } catch {} }
+      await store.focusFilled(r.profiles);
+      state.restoreFile = null; closeModal();
+      const s = r.stats;
+      modal(html`<h3>Восстановлено</h3><p class="small">Добавлено записей ${s.added}, уже были ${s.same}, оставлены текущие (отличались) ${s.kept}; новых профилей ${s.profiles}, настроек ${s.settings}.</p>
+        <p class="muted small">Перед восстановлением сохранён снимок текущих данных${r.differences ? '; версии из файла, не заменившие текущие, сохранены отдельно' : ''}.</p><button class="btn" data-close>Закрыть</button>`);
+    } catch (e) { toast('Не восстановлено: ' + (e.message || e), 7000); }
+    render(); return true;
+  }
+  return false;
+}
+function previewRestore(obj) {
+  const chk = backup.inspectFile(obj);
+  if (!chk.ok) return modal(html`<h3>Файл не принят</h3><p class="err small">${esc(chk.problems.join('; '))}</p><p class="muted small">Ничего не изменено.</p><button class="btn" data-close>Закрыть</button>`);
+  state.restoreFile = obj;
+  const s = chk.summary;
+  modal(html`<h3>Резервная копия от ${new Date(s.exportedAt).toLocaleString('ru-RU')}</h3>
+    <p class="muted small">Файл цел (контрольная сумма и число записей совпали)${s.appVersion ? `, версия приложения ${esc(s.appVersion)}` : ''}.</p>
+    <ul class="small">${s.profiles.map(p => html`<li><b>${esc(p.name)}</b>: отметок ${p.marks} (знаю ${p.known}), попыток ${p.attempts}, заметок ${p.notes}</li>`)}</ul>
+    <p class="small">Как восстановить? Перед записью будет сохранён снимок текущих данных.</p>
+    <div class="list">
+      <button class="btn primary" data-act="full-restore-merge">Добавить недостающее (совпадающее пропускается, отличающееся не заменяется)</button>
+      <button class="btn" data-act="full-restore-new">Восстановить в новые профили (ничего не менять)</button>
+      <button class="btn" data-close>Отмена</button>
+    </div>`);
+}
+
 /* ---------- обработчики ---------- */
 async function onViewClick(ev) {
   const closer = ev.target.closest('[data-close]');
@@ -1092,6 +1323,7 @@ async function onViewClick(ev) {
   const b = ev.target.closest('[data-act]'); if (!b) return;
   const { act, id } = b.dataset;
   if (b.closest('#menu')) return;                              // меню обрабатывается отдельно
+  if (await onSafetyAct(act, b)) return;
   if (act === 'profiles') return openProfiles();
   if (act === 'goto') { ev.preventDefault(); closeModal(); return go(id); }
   if (act.startsWith('rc-')) return onRestoreAct(act, b);
@@ -1284,6 +1516,11 @@ async function onViewChange(ev) {
       toast(r.count ? `Словарь учебника загружен: ${r.count} слов уроков` : 'Словарь учебника уже загружен — без изменений', 5000);
       return render();
     }
+    if (mode === 'full-backup') {
+      input.value = '';
+      let obj; try { obj = JSON.parse(text); } catch { throw new Error('файл не разбирается как JSON'); }
+      return previewRestore(obj);
+    }
     if (mode === 'transfer') {
       input.value = '';
       const obj = JSON.parse(text);
@@ -1310,6 +1547,7 @@ async function onViewChange(ev) {
       const problems = store.verifyBackup(obj);
       if (problems.length) return modal(html`<h3>Копия не принята</h3><p class="err">${esc(problems.join('; '))}</p><button class="btn" data-close>Закрыть</button>`);
       const target = input.dataset.target || 'new';
+      if (target === 'current') await backup.snapshot('pre-backup-restore', 'перед загрузкой копии профиля в текущий профиль');   // откат возможен
       const res = await store.importBackup(obj, { into: target, name: target === 'test' ? 'Тестовый профиль' : null });
       closeModal();
       return modal(html`<h3>Копия загружена</h3><p>Профиль: <b>${esc(res.profile.name)}</b></p>
@@ -1570,9 +1808,10 @@ async function renderRestore() {
     </div>` : ''}`;
 }
 
-async function saveJSONFile(name, text) {
+async function saveJSONFile(name, text, { share = false } = {}) {
   const file = new File([text], name, { type: 'application/json' });
-  if (recover.isStandalone() && navigator.canShare?.({ files: [file] })) {
+  const touch = /iPhone|iPad|iPod|Android/.test(navigator.userAgent) || (navigator.maxTouchPoints > 1 && /Macintosh/.test(navigator.userAgent));
+  if ((recover.isStandalone() || (share && touch)) && navigator.canShare?.({ files: [file] })) {
     try { await navigator.share({ files: [file], title: name }); return 'shared'; }
     catch (e) { if (e?.name === 'AbortError') return 'cancelled'; }
   }
