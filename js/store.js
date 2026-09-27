@@ -152,9 +152,22 @@ export async function recordAttempt({ entryId, lessonId = null, correct, almost 
   return { attempt, progress: p };
 }
 
-/** Лимит новых слов в день (для ежедневного занятия), по профилю. */
-export const newPerDay = async () => Number(await db.metaGet('newPerDay:' + currentProfileId, 5)) || 5;
-export const setNewPerDay = (n) => db.metaSet('newPerDay:' + currentProfileId, Math.max(1, Math.min(50, Number(n) || 5)));
+/** Лимит новых слов в день, по профилю. 0 (по умолчанию) — без лимита: учить можно сколько угодно. */
+export const NEW_LIMITS = [0, 10, 20, 50, 100, 200];
+export const newPerDay = async () => { const n = Number(await db.metaGet('newPerDay:' + currentProfileId, 0)); return n > 0 ? n : Infinity; };
+export const setNewPerDay = (n) => db.metaSet('newPerDay:' + currentProfileId, Math.max(0, Math.floor(Number(n) || 0)));
+/** Сколько новых слов ещё можно начать сегодня (Infinity — без лимита). */
+export async function newLeftToday() { const lim = await newPerDay(); return lim === Infinity ? Infinity : Math.max(0, lim - await newStartedToday()); }
+/**
+ * Разовый переход к «без лимита» для всех профилей устройства (прежний лимит 5 в день блокировал новые слова).
+ * Меняется только эта настройка; отметки, интервалы, заметки и статистика не трогаются.
+ */
+export async function liftDailyLimitOnce() {
+  if (await db.metaGet('fix:unlimitedNew@1')) return 0;
+  const rows = (await db.getAll('meta')).filter(m => /^newPerDay:/.test(m.key) && Number(m.value) !== 0);
+  await db.tx('meta', 'readwrite', t => { const os = t.objectStore('meta'); for (const m of rows) os.put({ key: m.key, value: 0 }); os.put({ key: 'fix:unlimitedNew@1', value: new Date().toISOString() }); });
+  return rows.length;
+}
 /** Сколько слов станет «пора повторить» в ближайшие ms (без тех, что уже пора). */
 export async function dueWithin(entryIds, ms, now = Date.now()) {
   const pm = await profileProgress(); let n = 0;

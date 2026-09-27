@@ -14,7 +14,7 @@ const $ = (sel, root = document) => root.querySelector(sel);
 const view = $('#view');
 let swError = null;
 // номер запущенной версии: при публикации сборка подставляет сюда коммит (tools/build-site.mjs)
-const BUILD = '531a5b2';
+const BUILD = 'd718a64';
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const html = (strings, ...vals) => strings.reduce((a, s, i) => a + s + (i < vals.length ? (Array.isArray(vals[i]) ? vals[i].join('') : vals[i] ?? '') : ''), '');
 
@@ -42,6 +42,7 @@ const state = { view: 'home', volume: 'shang', lessonId: null, drill: null };
 /* ---------- запуск ---------- */
 async function boot() {
   await store.ensureProfile();
+  await store.liftDailyLimitOnce().catch(() => {});        // прежний лимит «5 новых в день» снят: по умолчанию без лимита
   try { await cat.ensureSeeded(); }
   catch (e) { view.innerHTML = html`<div class="card"><h2>Не удалось загрузить данные приложения</h2><p class="err">${esc(e.message)}</p><p class="muted small">Откройте приложение через сервер (https:// или localhost), а не двойным щелчком по файлу.</p></div>`; return; }
   wireChrome();
@@ -317,7 +318,8 @@ async function renderHome() {
   const w = (n) => (n / total * 100).toFixed(2) + '%';
   const canStart = m.kind === 'hsk' ? (m.levels || []).length > 0 : !!m.lessonId;
   const limit = await store.newPerDay();
-  const newLeft = Math.max(0, limit - await store.newStartedToday());
+  const startedToday = await store.newStartedToday();
+  const newLeft = limit === Infinity ? Infinity : Math.max(0, limit - startedToday);
   const saved = await loadDrill();
   const rec = await recover.somethingToRecover(store.profileId());
   const offerRecover = (rec.legacy && !(await recover.lastReport(store.profileId()))) || (!rec.mine && rec.other > 0);
@@ -350,8 +352,9 @@ async function renderHome() {
     ${saved ? html`<button class="btn primary block" data-act="resume">Продолжить занятие · ${saved.i + 1} из ${saved.ids.length}</button>
       <button class="linkbtn center" data-act="start" ${canStart ? '' : 'disabled'}>Начать новое занятие</button>`
     : html`<button class="btn primary block" data-act="start" ${canStart ? '' : 'disabled'}>Начать</button>`}
-    ${ids.length ? html`<p class="today muted small center">Повторить: <b>${due}</b> · новых сегодня: <b>${Math.min(newLeft, st.new)}</b>
-      <label>· лимит <select data-mode="new-limit" aria-label="Новых слов в день">${[3, 5, 8, 10, 15, 20].map(n => html`<option ${n === limit ? 'selected' : ''}>${n}</option>`)}</select> в день</label></p>` : ''}
+    ${ids.length ? html`<p class="today muted small center">Повторить: <b>${due}</b> · новых в материале: <b>${st.new}</b>${startedToday ? html` · начато сегодня: <b>${startedToday}</b>` : ''}
+      <label>· новых в день <select data-mode="new-limit" aria-label="Новых слов в день">${store.NEW_LIMITS.map(n => html`<option value="${n}" ${(n || Infinity) === limit ? 'selected' : ''}>${n ? n : 'без лимита'}</option>`)}</select></label>
+      ${newLeft === 0 && st.new ? html`<br><span class="warn">Выбранный лимит на сегодня достигнут — «Начать» даст повторение; лимит можно снять.</span>` : ''}</p>` : ''}
     ${missing.length ? html`<p class="hint">${missing.map(LEVEL_LABEL).join(', ')} скачается при старте — один раз, дальше без сети.</p>` : ''}
     <button class="linkbtn center" data-act="start-quiz" ${canStart && ids.length >= 4 ? '' : 'disabled'}>Самопроверка: выбрать перевод</button>
     <button class="linkbtn center" data-act="mat-words" ${ids.length ? '' : 'disabled'}>Все слова материала</button>
@@ -378,9 +381,8 @@ async function startFromHome(mode) {
   }
   const ids = await materialIds(m);
   const scope = m.kind === 'textbook' ? m.lessonId : '__mat__';
-  // ежедневное занятие: сначала повторения, затем новые — не больше лимита на сегодня
-  const newLimit = Math.max(0, (await store.newPerDay()) - await store.newStartedToday());
-  return startDrill(scope, mode, { ids, from: 'home', newLimit });
+  // занятие: сначала повторения, затем новые; по умолчанию без дневного лимита, порция — до 20 карточек
+  return startDrill(scope, mode, { ids, from: 'home', newLimit: await store.newLeftToday() });
 }
 
 /* ---------- учебник ---------- */
@@ -758,7 +760,7 @@ async function clozeFor(e, pm) {
 async function startDrill(scope, mode = 'recall', { ids = null, from = null, newLimit = Infinity } = {}) {
   const pool = ids || await poolFor(scope);
   const queue = await store.buildQueue(pool, { limit: 20, onlyDue: scope === '__due__', newLimit });
-  if (!queue.length) return toast(newLimit === 0 ? 'На сегодня всё: повторять нечего, лимит новых слов исчерпан — его можно увеличить на главной' : 'Нечего повторять — на сегодня всё', 5000);
+  if (!queue.length) return nothingToStudy(pool, { newLimit, from, scope, mode });
   const lessonId = scope.startsWith('__') ? null : scope;
   const audio = audioOK();
   const pm = await store.profileProgress();
@@ -799,6 +801,25 @@ async function resumeDrill() {
   renderDrill(); scrollTo(0, 0);
 }
 
+/** Начать нечего: честно сказать почему и предложить повторение или другой материал. */
+async function nothingToStudy(pool, { newLimit, from, scope, mode }) {
+  const pm = await store.profileProgress();
+  const newIn = pool.filter(id => { const p = pm.get(id); return !p || (p.status === 'new' && !p.reps); }).length;
+  const next = pool.map(id => pm.get(id)).filter(p => p?.reps && p.due > Date.now()).map(p => p.due).sort((a, b) => a - b)[0];
+  const allDue = (await store.buildQueue((await db.getAll('entries')).map(e => e.id), { limit: 1, onlyDue: true })).length;
+  state.retry = { scope, mode, ids: pool, from };
+  modal(html`<h3>${newIn && newLimit === 0 ? 'Лимит новых слов на сегодня достигнут' : 'Новые слова закончились'}</h3>
+    <p class="small">${newIn && newLimit === 0 ? `В материале ещё ${newIn} новых слов, но достигнут выбранный вами дневной лимит.`
+      : `В выбранном ${scope && !String(scope).startsWith('__') ? 'уроке' : 'материале'} новых слов больше нет, и повторять сейчас нечего.`}
+    ${next ? ` Ближайшее повторение здесь — ${new Date(next).toLocaleString('ru-RU', { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' })}.` : ''}</p>
+    <div class="list">
+      ${newIn && newLimit === 0 ? html`<button class="btn primary" data-act="retry-nolimit">Учить дальше без лимита</button>` : ''}
+      ${allDue ? html`<button class="btn" data-act="goto-review">Повторение: слова из других уроков и уровней</button>` : ''}
+      <button class="btn" data-act="pick-material">Другой урок или уровень</button>
+      <button class="btn" data-close>Закрыть</button>
+    </div>`);
+}
+
 /** Итог: что повторено, что было трудно, что дальше. Без наград и рейтингов. */
 async function renderSummary(d) {
   const s = await store.endSession();
@@ -819,6 +840,10 @@ async function renderSummary(d) {
   const pm = await store.profileProgress();
   const dueNow = pool.filter(id => { const p = pm.get(id); return p && p.reps && p.due <= Date.now(); }).length;
   const soon = await store.dueWithin(pool, DAY_MS);
+  const newLeftInPool = pool.filter(id => { const p = pm.get(id); return !p || (p.status === 'new' && !p.reps); }).length;
+  const allowed = d.from === 'home' ? await store.newLeftToday() : Infinity;
+  const canMore = dueNow > 0 || (newLeftInPool > 0 && allowed > 0);
+  const where = d.lessonId ? 'в этом уроке' : 'в выбранном материале';
   const self = log.filter(x => x.chosen === undefined), choice = log.filter(x => x.chosen !== undefined);
   const byDir = (dir) => self.filter(x => x.dir === dir).length;
   view.innerHTML = html`<div class="summary">
@@ -831,10 +856,13 @@ async function renderSummary(d) {
       <div class="list">${hard.map(e => html`<button class="word card tight" data-act="word" data-id="${e.id}"><span class="hz">${esc(e.hanzi)}</span><span class="grow"><span class="py">${esc(e.pinyin)}</span> <span class="small">${esc(P.splitMeaning(e.ru).main)}</span></span></button>`)}</div>
       <p class="muted small">Эти слова вернутся раньше: через 10 минут («не знаю») или завтра («почти»).</p>` : html`<p class="small ok">Трудных слов в этом занятии не было.</p>`}
     <div class="label" style="margin-top:14px">Дальше</div>
-    <p class="small">${dueNow ? `Пора повторить ещё: <b>${dueNow}</b> — можно сделать ещё заход сейчас или позже.` : 'Всё, что пора было повторить, повторено.'}
-      ${soon ? ` В ближайшие сутки подойдёт ещё ${soon}.` : ''}</p>
-    ${dueNow ? html`<button class="btn primary block" data-act="again">Ещё заход</button>` : ''}
-    <button class="${dueNow ? 'linkbtn center' : 'btn primary block'}" data-act="stop-drill">${d.from === 'lesson' ? 'К уроку' : 'На главную'}</button>
+    <p class="small">Новых слов ${where}: <b>${newLeftInPool}</b> · пора повторить: <b>${dueNow}</b>${soon ? ` · в ближайшие сутки подойдёт ещё ${soon}` : ''}.</p>
+    ${canMore ? html`<button class="btn primary block" data-act="again">Учить дальше</button>`
+      : newLeftInPool > 0 ? html`<p class="small warn">Выбранный вами лимит новых слов на сегодня достигнут.</p>
+        <button class="btn primary block" data-act="again" data-nolimit="1">Учить дальше без лимита</button>`
+      : html`<p class="small">Новые слова ${where} закончились, и повторять сейчас нечего.</p>
+        <div class="row"><button class="btn" data-act="goto-review">Повторение</button><button class="btn" data-act="pick-material">Другой урок или уровень</button></div>`}
+    <button class="linkbtn center" data-act="stop-drill">${d.from === 'lesson' ? 'К уроку' : 'На главную'}</button>
   </div>`;
 }
 
@@ -1397,15 +1425,21 @@ async function onViewClick(ev) {
     if (autoSpeakOn && d.say) speech.speak(d.say);           // из самого нажатия — так требует Safari на iPhone
     return renderDrill();
   }
+  if (act === 'goto-review') { closeModal(); state.drill = null; await db.metaSet(drillKey(), null).catch(() => {}); return go('review'); }
+  if (act === 'pick-material') { closeModal(); state.drill = null; state.view = 'home'; await render(); setTimeout(() => document.querySelector('.seg, #mat-lesson')?.scrollIntoView({ block: 'center' }), 50); return toast('Выберите урок или уровень, затем «Начать»', 3500); }
+  if (act === 'retry-nolimit') { closeModal(); const r = state.retry; state.retry = null; return r && startDrill(r.scope, r.mode, { ids: r.ids, from: r.from, newLimit: Infinity }); }
   if (act === 'again') {
     const d = state.drill; state.drill = null;
+    if (!d) return render();
     if (d.mode === 'sentence') return startSentenceDrill(d.sentenceOf);
-    const newLimit = d.from === 'home' ? Math.max(0, (await store.newPerDay()) - await store.newStartedToday()) : Infinity;
+    const newLimit = d.from === 'home' && !b.dataset.nolimit ? await store.newLeftToday() : Infinity;
     return startDrill(d.scope, d.mode, { ids: d.pool, from: d.from, newLimit });
   }
   if (act === 'stop-drill') {
     const d = state.drill; if (!d?.finished) await store.endSession();
-    state.drill = null; if (d && d.mode !== 'sentence') await db.metaSet(drillKey(), null).catch(() => {});      // закончил сам — продолжать нечего
+    // «Закончить»: ответы уже записаны; незавершённая порция сохраняется — на главной «Продолжить занятие»
+    if (d && d.mode !== 'sentence') { if (d.finished) await db.metaSet(drillKey(), null).catch(() => {}); else await saveDrill(d.revealed ? 0 : 0); }
+    state.drill = null;
     if (d?.from === 'lesson' && d.lessonId) state.lessonId = d.lessonId; else if (d?.from === 'home') state.view = 'home';
     return render();
   }
