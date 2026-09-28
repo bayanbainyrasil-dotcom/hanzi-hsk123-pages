@@ -259,3 +259,4 @@ dialog.pop::backdrop{background:rgba(0,0,0,.5)}
 #cloudline{min-height:32px;font-size:.78rem;color:var(--faint);margin-top:6px}
 #cloudline[data-state="error"]{color:var(--red)}
 .warn{color:var(--amber)}
+.steps{list-style:none;padding-left:0;margin:6px 0}.steps li{margin:3px 0}.steps li.ok{color:var(--green)}.steps li.err{color:var(--red)}

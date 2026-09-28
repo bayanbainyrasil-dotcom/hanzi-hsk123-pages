@@ -173,6 +173,10 @@ async function gh(c, method, path, body) {
   if (res.ok) return res.status === 204 ? null : res.json();
   let j = {}; try { j = await res.json(); } catch {}
   const msg = String(j.message || '');
+  try { return mapError(res.status, rem, msg); } catch (e) { e.http = res.status; e.ghMessage = msg.slice(0, 120); throw e; }
+}
+function mapError(status, rem, msg) {
+  const res = { status };
   if (res.status === 401) throw new SyncError('auth', ERR_TEXT.auth);
   if (res.status === 403 || res.status === 429) {
     if (rem === '0' || /rate limit/i.test(msg)) throw new SyncError('rate', ERR_TEXT.rate, { retryAt: rate.resetAt });
@@ -208,16 +212,41 @@ async function initRepo(c) {
   await gh(c, 'PUT', `${repoPath(c)}/contents/hanzi-sync.json`, { message: 'hanzi-hsk123: начало облачного хранилища', content: b64encode(manifest), branch: c.branch || 'main' });
 }
 
-/* ---------- подключение ---------- */
+/* ---------- подключение: пошаговый журнал (без ключа) ---------- */
+// Каждый этап подключения записывается на устройстве: время, итог, HTTP-код. Сообщение не исчезает с экрана,
+// его можно скопировать — по нему видно, где именно остановилось: сеть, ключ, репозиторий, право записи, отправка.
+const ATTEMPT = 'attempt';
+const describe = (e) => `${e?.message || e}${e?.http ? ` (HTTP ${e.http}${e.ghMessage ? ': ' + e.ghMessage : ''})` : ''}`;
+async function step(log, name, fn) {
+  try { const v = await fn(); log?.push({ name, ok: true, detail: typeof v === 'string' ? v : '' }); return v; }
+  catch (e) { log?.push({ name, ok: false, detail: describe(e) }); throw e; }
+}
+export async function saveAttempt(log, final) {
+  const rec = { id: ATTEMPT, at: new Date().toISOString(), steps: log, final,
+    online: typeof navigator !== 'undefined' ? navigator.onLine : null, ua: typeof navigator !== 'undefined' ? String(navigator.userAgent || '').slice(0, 140) : '' };
+  await db.tx('sync', 'readwrite', t => { t.objectStore('sync').put(rec); });
+  return rec;
+}
+export const lastAttempt = () => db.get('sync', ATTEMPT).catch(() => null);
+/** Доступен ли GitHub API из этой сети (без ключа, ничего не отправляет). */
+export async function probe() {
+  try {
+    const r = await fetch(API + '/rate_limit', { cache: 'no-store', signal: typeof AbortSignal !== 'undefined' && AbortSignal.timeout ? AbortSignal.timeout(TIMEOUT_MS) : undefined });
+    return { ok: r.status < 500, status: r.status, text: `GitHub отвечает (HTTP ${r.status})` };
+  } catch (e) { return { ok: false, status: 0, text: e?.name === 'TimeoutError' ? 'GitHub не ответил за 25 с (сеть или блокировка)' : 'нет соединения с api.github.com (сеть, VPN или блокировка)' }; }
+}
+
 /** Проверка ключа и репозитория до подключения. Ничего не записывает. */
-export async function inspect(token, repo) {
+export async function inspect(token, repo, log = null) {
   const c = { token: String(token || '').trim(), repo: String(repo || '').trim(), checked: true };
-  if (!c.token) throw new SyncError('auth', 'вставьте ключ доступа GitHub');
-  const user = await gh(c, 'GET', '/user');
+  if (!c.token) { log?.push({ name: 'ключ GitHub', ok: false, detail: 'ключ не вставлен' }); throw new SyncError('auth', 'вставьте ключ доступа GitHub'); }
+  if (/\s/.test(c.token) || c.token.length < 20) { log?.push({ name: 'ключ GitHub', ok: false, detail: 'вставлен не ключ (пробелы или слишком короткий)' }); throw new SyncError('auth', 'похоже, вставлен не ключ: скопируйте его целиком со страницы GitHub'); }
+  const user = await step(log, 'ключ GitHub принят', async () => { const u = await gh(c, 'GET', '/user'); return u; });
+  log && (log[log.length - 1].detail = 'аккаунт ' + user.login);
   if (!c.repo.includes('/')) c.repo = `${user.login}/${c.repo || DEFAULT_REPO_NAME}`;
-  const r = await gh(c, 'GET', repoPath(c));
-  if (!r.private) throw new SyncError('public', `репозиторий ${c.repo} публичный — учебные данные в него не отправляются. Сделайте его приватным`);
-  if (r.permissions && !r.permissions.push) throw new SyncError('forbidden', ERR_TEXT.forbidden);
+  const r = await step(log, `репозиторий ${c.repo} доступен ключу`, () => gh(c, 'GET', repoPath(c)));
+  await step(log, 'репозиторий приватный', async () => { if (!r.private) throw new SyncError('public', `репозиторий ${c.repo} публичный — учебные данные в него не отправляются. Сделайте его приватным`); return ''; });
+  if (r.permissions && !r.permissions.push) { log?.push({ name: 'право записи', ok: false, detail: ERR_TEXT.forbidden }); throw new SyncError('forbidden', ERR_TEXT.forbidden); }
   c.branch = r.default_branch || 'main'; c.login = user.login;
   const out = { login: user.login, repo: r.full_name, branch: c.branch, sizeKB: r.size || 0, empty: false, foreign: false, profiles: [] };
   const h = await head(c);
@@ -245,27 +274,34 @@ export async function localSummary() {
  * Подключить устройство к облаку. uploadIds — какие профили устройства отправить в этот аккаунт
  * (профили, уже привязанные к другому аккаунту, не отправляются никогда).
  */
-export async function connect(token, repo, { uploadIds = [] } = {}) {
-  const info = await inspect(token, repo);
+export async function connect(token, repo, { uploadIds = [], log = null } = {}) {
+  let info;
+  try { info = await inspect(token, repo); }                     // повторная проверка перед подключением (в журнал — только сбой)
+  catch (e) { log?.push({ name: 'повторная проверка перед подключением', ok: false, detail: describe(e) }); throw e; }
   if (info.foreign) throw new SyncError('foreign', `в ${info.repo} уже есть посторонние файлы — укажите пустой приватный репозиторий`);
   const c = { id: CONN, token: String(token).trim(), repo: info.repo, login: info.login, branch: info.branch, connectedAt: new Date().toISOString() };
   const key = accountKey(c);
   const profiles = await db.getAll('profiles');
   c.excluded = profiles.filter(p => !uploadIds.includes(p.id)).map(p => p.id);    // не выбранные сейчас — не отправляются и позже
   const chosen = profiles.filter(p => uploadIds.includes(p.id) && p.kind !== 'test' && (!p.owner || p.owner === key));
-  // выбранные профили помечаются владельцем и все их записи ставятся в очередь (первая отправка)
-  await db.tx(['profiles', 'progress', 'attempts', 'notes', 'journal', 'sessions', 'meta', 'entries', 'links', 'sync'], 'readwrite', async (t) => {
+  // выбранные профили помечаются владельцем и все их записи ставятся в очередь (первая отправка).
+  // Сначала всё читается, затем одна синхронная транзакция: в Safari транзакция не переживает await.
+  const ids = new Set(chosen.map(p => p.id));
+  const rows = {};
+  for (const s of ['progress', 'attempts', 'notes', 'journal', 'sessions']) rows[s] = (await db.getAll(s)).filter(r => ids.has(r.profileId));
+  rows.meta = (await db.getAll('meta')).filter(m => { const pl = placeOf('meta', m.key, m); return pl && (!pl.pid || ids.has(pl.pid)); });
+  for (const s of ['entries', 'links']) rows[s] = (await db.getAll(s)).filter(r => /^(user|import)/.test(String(r.source || '')));
+  await db.tx(['profiles', 'progress', 'attempts', 'notes', 'journal', 'sessions', 'meta', 'entries', 'links', 'sync'], 'readwrite', (t) => {
     t.objectStore('sync').put(c);
-    const ids = new Set(chosen.map(p => p.id));
     for (const p of chosen) t.objectStore('profiles').put({ ...p, owner: key });
-    const all = (s) => new Promise(r => { const q = t.objectStore(s).getAll(); q.onsuccess = () => r(q.result); });
-    for (const s of ['progress', 'attempts', 'notes', 'journal', 'sessions']) for (const row of await all(s)) if (ids.has(row.profileId)) t.objectStore(s).put(row);
-    for (const m of await all('meta')) { const pl = placeOf('meta', m.key, m); if (pl && (!pl.pid || ids.has(pl.pid))) t.objectStore('meta').put(m); }
-    for (const s of ['entries', 'links']) for (const row of await all(s)) if (/^(user|import)/.test(String(row.source || ''))) t.objectStore(s).put(row);
+    for (const [s, list] of Object.entries(rows)) for (const row of list) t.objectStore(s).put(row);
   });
   const st = await loadState(c); st.sizeKB = info.sizeKB; st.sizeCheckedAt = Date.now(); await saveState(st);
+  log?.push({ name: 'устройство подключено, профили выбраны', ok: true, detail: `к отправке: ${chosen.map(p => p.name).join(', ') || 'ничего (только загрузка из облака)'}` });
   setStatus({ cloud: 'idle', text: 'подключено: ' + c.repo });
-  return syncNow('connect');
+  const r = await syncNow('connect');
+  log?.push({ name: 'первая отправка подтверждена GitHub', ok: !!r.ok, detail: r.ok ? `коммит ${String(r.commit || '').slice(0, 7) || '— (нечего отправлять)'}` : `${r.text || r.code}${r.http ? ` (HTTP ${r.http})` : ''}` });
+  return r;
 }
 
 /** Отключить устройство: ключ удаляется только отсюда, данные на устройстве и в облаке остаются. */
@@ -326,7 +362,7 @@ async function doSync(reason) {
     const code = e.code || 'server';
     st.lastError = { code, text: e.message, at: new Date().toISOString() }; await saveState(st).catch(() => {});
     setStatus({ cloud: 'error', code, text: e.message || ERR_TEXT.server, pending: await pendingCount() });
-    return { ok: false, code, text: e.message };
+    return { ok: false, code, text: e.message, http: e.http || null };
   }
 }
 

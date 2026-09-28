@@ -14,7 +14,7 @@ const $ = (sel, root = document) => root.querySelector(sel);
 const view = $('#view');
 let swError = null;
 // номер запущенной версии: при публикации сборка подставляет сюда коммит (tools/build-site.mjs)
-const BUILD = 'd718a64';
+const BUILD = 'e22b573';
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const html = (strings, ...vals) => strings.reduce((a, s, i) => a + s + (i < vals.length ? (Array.isArray(vals[i]) ? vals[i].join('') : vals[i] ?? '') : ''), '');
 
@@ -1151,7 +1151,19 @@ async function renderData() {
 }
 
 /* ---------- «Данные» → сохранность: облако, резервная копия файлом, версии, конфликты, корзина ---------- */
-const TOKEN_URL = (owner) => `https://github.com/settings/personal-access-tokens/new?name=${encodeURIComponent('hanzi-hsk123 облако')}&description=${encodeURIComponent('Сохранение учебного прогресса hanzi-hsk123 в приватный репозиторий')}${owner ? '&target_name=' + encodeURIComponent(owner) : ''}&expires_in=366&contents=write`;
+const TOKEN_URL = (owner) => `https://github.com/settings/personal-access-tokens/new?name=hanzi-hsk123-data&description=${encodeURIComponent('hanzi-hsk123 progress sync (one private repo)')}${owner ? '&target_name=' + encodeURIComponent(owner) : ''}&expires_in=366&contents=write`;
+function attemptHTML(a) {
+  if (!a) return '';
+  const bad = a.steps?.some(x => !x.ok);
+  return html`<details class="more" id="cloud-attempt" ${bad ? 'open' : ''}><summary>Последняя попытка подключения: ${new Date(a.at).toLocaleString('ru-RU')}${bad ? ' — остановилась' : ''}</summary>
+    <ul class="small steps">${(a.steps || []).map(x => html`<li class="${x.ok ? 'ok' : 'err'}">${x.ok ? '✓' : '✗'} ${esc(x.name)}${x.detail ? html` — <span class="muted">${esc(x.detail)}</span>` : ''}</li>`)}</ul>
+    <p class="small"><b>${esc(a.final || '')}</b></p>
+    <div class="row"><button class="btn sm" data-act="copy-attempt">Скопировать отчёт (без ключа)</button><button class="btn sm" data-act="cloud-probe">Проверить связь с GitHub</button></div>
+  </details>`;
+}
+function attemptText(a) {
+  return [`hanzi-hsk123 ${BUILD} · попытка подключения ${a.at}`, ...(a.steps || []).map(x => `${x.ok ? 'OK ' : 'ОШИБКА '}${x.name}${x.detail ? ' — ' + x.detail : ''}`), `итог: ${a.final}`, `в сети: ${a.online}`, `браузер: ${a.ua}`].join('\n');
+}
 async function safetyCard() {
   const conn = await sync.getConn();
   const lastFile = await backup.lastSavedAt();
@@ -1159,9 +1171,11 @@ async function safetyCard() {
   const conflicts = conn ? await sync.listConflicts() : [];
   const trash = await backup.listTrash();
   const snaps = (await backup.listSnapshots()).filter(x => x.kind !== 'trash');
+  const attempt = await sync.lastAttempt();
   return html`<div class="card" id="safety-box">
     <h3>Сохранность</h3>
     <div id="cloud-status">${cloudStatusHTML()}</div>
+    ${attemptHTML(attempt)}
     ${conn ? html`
       <p class="muted small">Облако: приватный репозиторий <b>${esc(conn.repo)}</b> (аккаунт GitHub ${esc(conn.login)}). Отправка идёт, пока приложение открыто:
       после ответов, при открытии и при появлении сети. Когда iPhone закрыл приложение, отправки нет — она продолжится при следующем открытии.</p>
@@ -1225,14 +1239,31 @@ async function onSafetyAct(act, b) {
     document.getElementById('safety-box')?.scrollIntoView({ block: 'start' }); return true;
   }
   if (act === 'cloud-sync') { b.disabled = true; const r = await sync.syncNow('manual'); b.disabled = false; toast(r.ok ? 'Сохранено в облаке' : 'Облако: ' + (r.text || 'не подключено'), 4000); render(); return true; }
+  if (act === 'cloud-probe') {
+    b.disabled = true; b.textContent = 'Проверяю связь…';
+    const r = await sync.probe();
+    await sync.saveAttempt([{ name: 'связь с GitHub (без ключа)', ok: r.ok, detail: r.text }], r.ok ? 'связь с GitHub есть' : 'связи с GitHub нет — облако работать не сможет, данные сохраняются на устройстве');
+    render(); return true;
+  }
+  if (act === 'copy-attempt') {
+    const a = await sync.lastAttempt(); if (!a) return true;
+    try { await navigator.clipboard.writeText(attemptText(a)); toast('Отчёт скопирован — вставьте его в чат', 3500); }
+    catch { modal(html`<h3>Отчёт о подключении</h3><textarea readonly rows="10" style="width:100%;font-size:.78rem">${esc(attemptText(a))}</textarea><button class="btn" data-close>Закрыть</button>`); }
+    return true;
+  }
   if (act === 'cloud-inspect') {
     const token = $('#cloud-token')?.value || '', repo = $('#cloud-repo')?.value || '';
     b.disabled = true; b.textContent = 'Проверяю…';
+    const log = [];
     try {
-      const info = await sync.inspect(token, repo);
+      const net = await sync.probe();
+      log.push({ name: 'связь с GitHub', ok: net.ok, detail: net.text });
+      if (!net.ok) throw new Error(net.text);
+      const info = await sync.inspect(token, repo, log);
       const local = await sync.localSummary();
       if (info.foreign) throw new Error(`в ${info.repo} уже есть посторонние файлы — нужен пустой приватный репозиторий`);
-      state.cloudToken = token; state.cloudRepo = info.repo;
+      state.cloudToken = token; state.cloudRepo = info.repo; state.cloudLog = log;
+      await sync.saveAttempt(log, 'ключ и репозиторий проверены — ждёт «Подключить» в окне');
       const cur = store.profileId();
       modal(html`<h3>Подключить облако</h3>
         <p class="small">Аккаунт GitHub: <b>${esc(info.login)}</b>. Репозиторий: <b>${esc(info.repo)}</b> (приватный${info.empty ? ', пустой' : ''}).</p>
@@ -1243,18 +1274,20 @@ async function onSafetyAct(act, b) {
           <input type="checkbox" data-upload="${esc(p.id)}" ${(p.progress + p.attempts + p.notes + p.journal) && (!p.owner || p.owner === info.login + '/' + info.repo) ? 'checked' : ''} ${p.owner && p.owner !== info.login + '/' + info.repo ? 'disabled' : ''} style="width:22px;height:22px"></label>`)}</div>
         <p class="muted small">Пустые профили по умолчанию не отправляются. Тестовые профили не отправляются никогда. Отключить можно в любой момент — данные останутся и здесь, и в облаке.</p>
         <div class="row"><button class="btn primary" data-act="cloud-connect">Подключить</button><button class="btn" data-close>Отмена</button></div>`);
-    } catch (e) { toast('Облако: ' + (e.message || e), 7000); }
+    } catch (e) { await sync.saveAttempt(log, 'не подключено: ' + (e.message || e)); toast('Облако: ' + (e.message || e), 7000); render(); }
     finally { b.disabled = false; b.textContent = 'Проверить'; }
     return true;
   }
   if (act === 'cloud-connect') {
     const ids = [...document.querySelectorAll('#modal [data-upload]')].filter(x => x.checked).map(x => x.dataset.upload);
     b.disabled = true; b.textContent = 'Подключаю…';
+    const log = state.cloudLog || [];
     try {
-      const r = await sync.connect(state.cloudToken, state.cloudRepo, { uploadIds: ids });
-      state.cloudToken = null; closeModal();
-      toast(r.ok ? 'Облако подключено · сохранено в облаке' : 'Подключено, но синхронизация не прошла: ' + (r.text || ''), 6000);
-    } catch (e) { toast('Облако: ' + (e.message || e), 7000); b.disabled = false; b.textContent = 'Подключить'; return true; }
+      const r = await sync.connect(state.cloudToken, state.cloudRepo, { uploadIds: ids, log });
+      state.cloudToken = null; state.cloudLog = null; closeModal();
+      await sync.saveAttempt(log, r.ok ? 'подключено: GitHub подтвердил сохранение' : 'устройство подключено, но облачная копия НЕ обновлена: ' + (r.text || r.code) + ' — данные остаются на устройстве');
+      toast(r.ok ? 'Облако подключено · сохранено в облаке' : 'Подключено, но облачная копия не обновлена: ' + (r.text || ''), 7000);
+    } catch (e) { await sync.saveAttempt(log, 'не подключено: ' + (e.message || e)); toast('Облако: ' + (e.message || e), 7000); closeModal(); render(); return true; }
     render(); return true;
   }
   if (act === 'cloud-disconnect') {

@@ -114,6 +114,9 @@ export function storageErrorText(err) {
 
 function run(store, mode, fn, opts = {}) {
   const writing = mode === 'readwrite';
+  // Safari (WebKit) может закрыть транзакцию между await — запись оборвётся и откатится. Пишущие транзакции —
+  // только синхронные функции (запросы и колбэки onsuccess); всё нужное читается заранее, отдельно.
+  if (writing && fn?.constructor?.name === 'AsyncFunction') return Promise.reject(new Error('внутренняя ошибка: асинхронная функция в пишущей транзакции'));
   let names = Array.isArray(store) ? store : [store];
   const track = writing && !opts.noOutbox && names.some(n => SYNCED.has(n));
   if (track && !names.includes('outbox')) names = [...names, 'outbox'];
